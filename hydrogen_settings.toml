@@ -1,0 +1,17 @@
+# Numerical hydrogen orbitals, using the same finite-difference Hamiltonian.
+# Run hydrogen.cmd. Edit hydrogen_orbital below to choose the shape.
+[simulation]
+potential = "hydrogen"
+n = 100
+length = 50.0
+states = 10
+
+[plot]
+# Named orbital mode selects a symmetry sector, so the generic state is ignored.
+state = 0
+hydrogen_orbital = "3d_z2"
+quantity = "wavefunction"
+zoom = "auto"
+density_scale = "log"
+surface = true
+output = ""

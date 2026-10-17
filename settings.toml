@@ -23,6 +23,15 @@ state = 4
 # "wavefunction" = signed amplitude (red/blue); "density" = probability density
 quantity = "wavefunction"
 
+# "auto" frames at least 99.5% of the sampled probability; "full" shows the box.
+zoom = "auto"
+# For density only: "log" makes weaker outer lobes visible.
+density_scale = "linear"
+# Also save a 3D signed-amplitude isosurface image.
+surface = false
+# Optional for hydrogen: "2p_z", "3d_xy", "3d_z2", etc. Empty uses state index.
+hydrogen_orbital = ""
+
 # Leave empty to save an automatically named image in the plots folder.
 # Paths are relative to this settings file, e.g. "plots/my_state.png".
 output = ""

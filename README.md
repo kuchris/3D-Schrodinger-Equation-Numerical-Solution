@@ -12,7 +12,7 @@ Method](https://doi.org/10.13140/RG.2.2.13878.01602/1).
 
 Requires Python 3.10 or later on PATH.
 
-1. Double-click `setup.cmd` once to create `.venv` and install dependencies.
+1. Double-click `setup.cmd` to create `.venv` and install or update dependencies.
 2. Edit `custom_potential.py` to define `V(x, y, z)`.
 3. Edit `settings.toml` to select the grid, state, and plot type.
 4. Double-click `plot.cmd`. Open the generated image in `plots/`.
@@ -31,7 +31,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe schrodinger_3d.py --potential harmonic
 .\.venv\Scripts\python.exe schrodinger_3d.py --potential box --n 24 --length 8 --states 6
-.\.venv\Scripts\python.exe -m unittest -v test_physics
+.\.venv\Scripts\python.exe -m unittest discover -v
 ```
 
 On macOS or Linux, use `.venv/bin/python` in place of `.venv\Scripts\python.exe`:
@@ -90,8 +90,8 @@ Each image shows the selected state's central XY, XZ, and YZ slices, plus
 computed energies. Only `box` and the omega=1 `harmonic` benchmark show continuum
 reference levels; other presets have no assumed analytical reference. All three slices share
 one color scale. These are local slices, not integrated projections.
-The default odd grid size, `n=25`, includes zero exactly; an even grid uses the
-nearest available coordinate and labels its actual position.
+The default odd grid size, `n=25`, includes zero exactly. On an even grid the
+wavefunction is interpolated to the central plane before computing density.
 
 Plotting lives in `plot_states.py`, keeping it separate from the solver.
 
@@ -116,6 +116,20 @@ locators, the circular-well extraction ambiguity, and the torus parameter choice
 Hydrogen uses an even grid to avoid r=0; an odd n is increased by one and reported.
 
 ## Excited states
+
+For textbook-style **numerical hydrogen orbitals**, double-click `hydrogen.cmd`
+and edit `hydrogen_settings.toml`. It selects real p/d orientations through
+numerical symmetry sectors of the same finite-difference Hamiltonian, and saves
+a large 3D isosurface image as well as central slices. Start with `2p_z`,
+`3d_xy`, or `3d_z2`. See [method, display options, and limits](docs/hydrogen-orbitals.md).
+
+![Numerical finite-difference hydrogen 3d_z2 orbital](docs/images/hydrogen-3d-z2.png)
+
+This isosurface comes from the computed wavefunction, not an analytical orbital
+formula. Its density threshold is 4% of the sampled peak.
+
+The generic plot supports `zoom = "auto"`, `density_scale = "log"`, and
+`surface = true` in `[plot]`. A central nodal plane is labeled explicitly.
 
 `state` is an index in the energy-sorted list: 0 is the ground state and 1 is
 the first excited state. It is not a quantum number for an individual axis.
@@ -157,6 +171,8 @@ the energies and probability integral:
 | `custom_potential.py` | Your editable `V(x, y, z)` | You want to supply your own potential |
 | `settings.toml` | Plot and simulation choices | You want to change the model, grid, or selected state |
 | `plot_states.py` | Settings loading, slices, and energy plot | You want to change how results are displayed |
+| `hydrogen_orbitals.py` | Symmetry-selected finite-difference hydrogen states | You want numerical real s/p/d orbitals |
+| `orbital_display.py` | Central cuts, auto framing, and 3D isosurfaces | You want to inspect display choices |
 | `test_physics.py` | Checks against independent numerical/physical expectations | You want to verify the implementation |
 
 The numerical workflow is:
@@ -257,3 +273,7 @@ weak harmonic solution, torus radius and energy offset, circular-well step
 values, tanh z independence, and unsmoothed Coulomb values and origin handling.
 The solver handles the stationary equation
 (TISE); time evolution is not implemented.
+
+`test_hydrogen_orbitals.py` also checks reconstructed states against the full
+finite-difference Hamiltonian, symmetry, nodal planes, auto framing, rejection
+of unbound named orbitals, and overlap with an analytical test reference.

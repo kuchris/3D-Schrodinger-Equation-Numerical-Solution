@@ -52,8 +52,9 @@ The presets retain fixed functions when refining the grid in this solver.
 
 The weak `paper_harmonic` case is strongly affected by the finite box at L=8.
 For all cases, check both grid spacing and box size before physical comparisons.
-Only `box` and the omega=1 `harmonic` preset currently show analytical reference
-curves; the other plots show computed levels without an assumed exact spectrum.
+In generic energy-index mode, only `box` and the omega=1 `harmonic` preset show
+analytical reference curves. The separate [named hydrogen orbital mode](hydrogen-orbitals.md)
+also compares the selected numerical state with its infinite-space energy.
 
 ## Coulomb singularity
 
