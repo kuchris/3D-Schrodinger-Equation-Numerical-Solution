@@ -1,57 +1,56 @@
-# Numerical hydrogen orbitals and readable plots
+# Named hydrogen orbitals (`hydrogen.cmd`)
 
-This guide describes the symmetry-aided mode, `method="symmetry"`. For solving
-from the full Hamiltonian without the orbital rules, use `direct.cmd` and
-[the full-grid guide](direct-hamiltonian.md).
+In this mode you name the orbital you want, for example `3d_z2`, and the
+program finds it directly. It uses symmetry to make the problem 8 times
+smaller, so it can afford a finer grid than [full-grid mode](direct-hamiltonian.md).
 
-Run `setup.cmd` to install the plotting dependency, then double-click
-`hydrogen.cmd`. Edit `config/hydrogen.toml` to select a named orbital.
-The default is `3d_z2`, using n=100 interior points and a cube of side 50.
-It writes both central slices and a separate 3D isosurface PNG in `outputs/plots/`.
+Run `hydrogen.cmd` and set `hydrogen_orbital` in
+[config/hydrogen.toml](../config/hydrogen.toml). The default is `3d_z2` with
+n = 100 and a cube of side 50. The run saves the centre cuts and a 3D picture
+in `outputs/plots/`.
 
-Supported labels: `1s`, `2s`, `3s`, `2p_x`, `2p_y`, `2p_z`, `3p_x`, `3p_y`,
+Supported names: `1s`, `2s`, `3s`, `2p_x`, `2p_y`, `2p_z`, `3p_x`, `3p_y`,
 `3p_z`, `3d_xy`, `3d_xz`, `3d_yz`, `3d_x2-y2`, and `3d_z2`.
-These are real orbital orientations; real p/d labels need not be Lz eigenstates.
-They are low-state symmetry selections, not a general quantum-number classifier.
 
-## The numerical method is retained
+## How it differs from full-grid mode
 
-The state is computed with the same three-dimensional Cartesian finite-difference
-Hamiltonian, `H = -0.5 * Laplacian - 1/r`, and zero boundary on the cube faces.
-No analytical hydrogen wavefunction is used to generate the plotted data.
+| | `hydrogen.cmd` | `direct.cmd` |
+| --- | --- | --- |
+| You give | An orbital name | Nothing about shapes |
+| Symmetry is used | Before solving, to choose which states to search | After solving, to sort states that share an energy |
+| Grid that is solved | One eighth of the cube | The whole cube |
+| Result | One state | The lowest `states` states |
 
-`schrodinger3d/hydrogen.py` uses exact reflection symmetries to solve a smaller
-matrix on the positive octant. On a centered even grid, the first point is h/2.
-Its ghost neighbor at -h/2 equals `parity * psi(h/2)`, so each inner octant face
-adds `-parity / (2*h**2)` to the existing kinetic diagonal. Mirroring the result
-recovers a full-grid state of the original discrete Hamiltonian.
+Both solve the same finite-difference H, -½∇² - 1/r with ψ = 0 on the walls.
+Neither puts a textbook formula into ψ. On the same grid they give the same
+3d_z2 state, which a test checks.
 
-Reflection parities isolate real p and off-diagonal d sectors. Permuting x/y/z
-and projecting onto the corresponding symmetry combinations selects s,
-d(x2-y2), and d(z2) states. These operations commute with the discrete cubic
-Hamiltonian. Tests also apply the original full-grid Hamiltonian to reconstructed
-states and check the residual and normalization. Analytical functions appear
-only in tests for comparison; the runtime reference uses only `E_n=-1/(2*n**2)`.
+## How the shortcut works
 
-The cube and grid break continuous rotational symmetry. The labels describe
-states approaching the corresponding free-atom orbitals on convergence;
-they do not assert exact continuum L2 quantum numbers on a finite grid.
+1. **Mirror signs.** Each of these orbitals is either even (+) or odd (-) under
+   each of the mirrors x → -x, y → -y, and z → -z. For example, 2p_z is
+   (+, +, -). The program takes these signs from a small table in
+   [hydrogen.py](../schrodinger3d/hydrogen.py).
+2. **Solve one eighth of the cube.** Once the signs are known, ψ in the corner
+   where x, y, and z are all positive determines ψ everywhere, so only that
+   corner is solved. A grid point next to a mirror plane sees its mirror image
+   as +ψ or -ψ, which adds -sign / (2h²) to the matrix diagonal there. This is
+   exact, not an approximation.
+3. **Separate shapes that share signs.** s, 3d_x2-y2, and 3d_z2 all have the
+   signs (+, +, +). Swapping axes tells them apart: an s state is unchanged by
+   every swap, and 3d_x2-y2 changes sign under x ↔ y. 3d_z2 is then built from
+   the 3d_x2-y2 state by permuting its axes.
+4. **Pick the right one.** Among the matching states, the table's rank selects,
+   for example, 3s as the third s-like state.
+5. **Mirror back** to the full cube, and check that the result solves the full H.
 
-## Why the earlier excited-state plots differed
+Steps 1, 3, and 4 use a table of known orbital symmetries, so this mode
+assumes the shape you ask for. Use `direct.cmd` if you want nothing assumed.
 
-- `state` is an energy-sorted finite-box index, not a principal or angular
-  quantum number. An arbitrary eigenvector in a degenerate space can have a
-  different orientation or combination from a textbook drawing.
-- L=8 is too small for free-atom excited orbitals. In a reproduced n=26 run,
-  state 4 had E=+0.21144751. This is a valid finite-box eigenstate, but not a
-  free-atom bound orbital. The generic plot now marks E>=0 explicitly.
-- Central planes may be nodal planes. On an even grid, psi is interpolated
-  to zero before taking its squared magnitude. Interpolating density instead
-  would incorrectly fill a node. Almost-zero planes are labeled as nodes.
-- Linear density colors can hide weaker outer lobes. Log density and auto zoom
-  help visibility without changing the computed state.
+If the selected state has E ≥ 0, the run stops with an error. Such a state is a
+standing wave in the box, not a bound orbital; enlarge the cube.
 
-## Display settings
+## Settings
 
 ```toml
 [plot]
@@ -62,26 +61,27 @@ density_scale = "log"
 surface = true
 ```
 
-`hydrogen_orbital = ""` restores the generic energy-index selection. A named
-orbital uses its symmetry selector instead of `state` or the requested `states`.
-It requires `potential = "hydrogen"` and rejects a nonnegative selected energy.
+`hydrogen_orbital` replaces `state`. It requires `potential = "hydrogen"` and
+`method = "symmetry"`, and it must be empty in the other modes. The display
+settings are explained in the [README](../README.md#main-settings).
 
-`zoom = "auto"` frames a centered cube containing at least 99.5% of the sampled
-probability; `full` shows the whole computational box. Coordinates remain in the
-same physical scale. `density_scale = "log"` shows density down to 1e-4 of the
-peak. All three cuts still share a color scale.
+## Accuracy
 
-The 3D plot uses signed-amplitude isosurfaces where density is 4% of the peak.
-Red and blue mark signs, not electron trajectories or a hard orbital boundary.
-Surface size depends on that display threshold.
+The default `3d_z2` run gives E = -0.055616, compared with the exact
+-1/18 = -0.055556, a difference of about 0.11%. Its residual is about 10⁻¹⁴.
+This is one example, not a guarantee: refine the grid and enlarge the cube to
+check. The printed outer-shell probability tells you how much of ψ is close to
+the walls.
 
-## Accuracy checks
+## Common surprises
 
-The default numerical 3d_z2 example gave E=-0.055615798 versus -1/18, a relative
-difference of about 0.108%, with eigenpair residual about 1.6e-14. This is one
-configuration, not a general accuracy guarantee. Grid and finite-box errors can
-cancel in the energy. Refine the spacing and enlarge the box separately, inspect
-the wavefunction, and monitor the reported outer-shell probability.
+- In `plot.cmd`, `state` is an energy order, not an orbital name. States that
+  share an energy can come out as tilted mixes. Use this mode, or `direct.cmd`
+  with `basis = "symmetry"`.
+- In a small cube (for example a side of 8), excited states have E > 0. They
+  are box states, not orbitals.
+- A centre cut can lie exactly on a node. It is then labelled "Nodal plane".
+- Faint outer lobes may need `density_scale = "log"` to be visible.
 
 Sources: [hydrogen spectrum and separation of variables](https://farside.ph.utexas.edu/teaching/qmech/lectures/node82.html),
-[marching cubes used for numerical isosurfaces](https://scikit-image.org/docs/stable/api/skimage.measure.html#skimage.measure.marching_cubes).
+[marching cubes used for the 3D surfaces](https://scikit-image.org/docs/stable/api/skimage.measure.html#skimage.measure.marching_cubes).

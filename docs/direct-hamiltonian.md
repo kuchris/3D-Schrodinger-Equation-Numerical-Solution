@@ -1,141 +1,111 @@
-# Full-Hamiltonian mode: solve first, measure afterwards
+# Full-grid mode (`direct.cmd`)
 
-Double-click `direct.cmd`. Edit `config/direct.toml` to select the potential,
-grid, count of eigenstates, and energy index to display.
+This mode solves the whole grid with no assumptions about orbital shapes.
+Shapes are organised only after the solve. Run `direct.cmd` and edit
+[config/direct.toml](../config/direct.toml). The default is hydrogen with
+n = 64, a cube of side 40, and the 14 lowest states.
 
-The generic solver already supported full-grid solving. This dedicated mode
-makes the choice explicit and adds post-solve angular diagnostics and a larger
-hydrogen example. It is independent of the named-orbital symmetry mode.
+## What happens, step by step
 
-## Inputs and calculation
+1. **Solve.** Build the full matrix H, which has 64³ = 262,144 unknowns by
+   default, and find the lowest states. No orbital names, n/l/m values, or
+   symmetry rules go into this step.
+2. **Sort equal-energy states**, if `basis = "symmetry"`. This is explained
+   below.
+3. **Measure**, if `angular_momentum = true`. Compute L², Lz, and mirror
+   numbers for each state. These are read-outs and change nothing.
+4. **Draw** the chosen `state` and print a table of all states.
 
-```toml
-[simulation]
-method = "full"
-potential = "hydrogen"
-n = 64
-length = 40.0
-states = 14
+## Why step 2 is needed
 
-[plot]
-state = 9
-hydrogen_orbital = ""
-quantity = "wavefunction"
-zoom = "auto"
-surface = true
+When several states have exactly the same energy, any mix of them also solves
+Hψ = Eψ. H alone cannot pick one, so the eigensolver returns some arbitrary
+mix, for example a p state that points diagonally instead of along x, y, or z.
 
-[analysis]
-angular_momentum = true
-basis = "symmetry"
-```
+Step 2 picks one definite set using symmetries of the potential itself:
 
-`schrodinger3d/direct.py` constructs the full Cartesian grid and the original
-sparse `H = -0.5 * Laplacian + V`. It passes only H, the state count, and volume
-spacing to `solve_lowest_states`. The eigensolver selects the lowest algebraic
-energies from a seeded random starting vector.
+- the mirrors x → -x, y → -y, and z → -z;
+- the swap x ↔ y.
 
-There is no n/l/m input, spherical harmonic, orbital template, parity sector,
-or octant solve in this route. For n=64 the matrix has 262144 unknowns.
-`state=9` means the tenth energy-sorted vector; it does not request a
-particular orbital shape. The optional basis choice described below happens
-only after the eigensolve.
+First, the program checks that V does not change under each operation, which
+guarantees that the operation works together with H. Then, inside each group
+of equal-energy states, it finds the combinations that each mirror either
+keeps unchanged (+) or flips in sign (-). Finally, the x ↔ y swap separates
+the one pair that the mirrors cannot. These signs are exactly how the textbook
+real orbitals differ from one another.
 
-After the eigensolver returns, the measurement pass reads each eigenvector
-without modifying it. Tests verify full-grid dimensions, agreement with an
-independent dense eigensolve for an asymmetric potential, and immutability
-under measurement. The full route does not import the named-orbital module.
+Only states with the same energy are mixed, so every result is still an exact
+solution of the same H. Energies do not change, and the residual stays around
+10⁻¹⁴. No orbital table or formula is used. The names in the last column below
+are read off afterwards from the measured signs and L².
 
-## Angular measurements
+Default run (n = 64, cube side 40):
 
-In units hbar=1 the Cartesian operators are:
+| States | Energy | Mirror signs (x, y, z) | x ↔ y | Looks like |
+| --- | --- | --- | --- | --- |
+| 0 | -0.4629 | + + + | + | 1s |
+| 1, 2, 3 | -0.1265 | - + +, + - +, + + - | ·, ·, + | 2p_x, 2p_y, 2p_z |
+| 4 | -0.1216 | + + + | + | 2s |
+| 5, 6, 7 | -0.0554 | - - +, - + -, + - - | +, ·, · | 3d_xy, 3d_xz, 3d_yz |
+| 8, 9 | -0.0550 | + + + | -, + | 3d_x2-y2, 3d_z2 |
+| 10, 11, 12 | -0.0548 | - + +, + - +, + + - | ·, ·, + | 3p_x, 3p_y, 3p_z |
+| 13 | -0.0524 | + + + | + | 3s |
 
-```text
-Lx psi = -i * (y * d(psi)/dz - z * d(psi)/dy)
-Ly psi = -i * (z * d(psi)/dx - x * d(psi)/dz)
-Lz psi = -i * (x * d(psi)/dy - y * d(psi)/dx)
-L2 psi = Lx(Lx psi) + Ly(Ly psi) + Lz(Lz psi)
-```
+A dot (·) means the swap turns that state into another state of the same
+group, for example p_x into p_y, so the state has no single swap sign.
 
-`angular.py` uses centered first differences and coordinate multiplication.
-It reports <L2>, its standard deviation, <Lz>, its standard deviation, and
-measured reflection expectations. These are measurements of the output,
-not constraints used to obtain it.
+With `basis = "raw"`, step 2 is skipped and the eigensolver's mixes are kept.
 
-The continuous diagnostic `l_effective = (sqrt(1+4*<L2>)-1)/2` is included for
-inspection. It is not a guaranteed quantum-number classification. In particular,
-<Lz>=0 with a nonzero spread does not establish a definite m=0 state.
+### Why mirrors, and not L² and Lz?
 
-## What is and is not determined
+The textbook route is to use L² to separate s, p, and d, and then Lz to
+separate m. On a cubic grid this does not work well:
 
-H alone determines energies and energy eigenspaces. A degenerate eigenspace
-does not specify a unique p_x, p_y, p_z, or n/l/m basis. The raw returned vectors
-can differ in orientation or combination between implementations while having
-the same energy. With `basis = "raw"` this mode preserves those original
-eigenvectors; `basis = "symmetry"` chooses one basis, as described below.
+- Inside one equal-energy group, every state has the same L², so L² separates
+  nothing. On the grid, s, p, and d already have different energies.
+- Lz cannot tell 3d_z2 from 3d_x2-y2 at all.
+- States with m = ±2 would need a mix of two groups that have different
+  energies on the grid (states 5-7 and 8-9). Such a mix is no longer a
+  solution; in a test its residual rose to about 10⁻⁴.
 
-The finite cube and Cartesian discretization do not preserve exact continuum
-rotational symmetry. Angular diagnostics, especially L2 spread near a hard
-boundary, can therefore have substantial discretization and boundary effects.
-L2 spread is computed by applying the discrete angular operators twice with
-zero exterior values; it must not be treated as an exact continuum measurement.
+The mirrors and the swap are exact symmetries of the grid, so they avoid all
+three problems. L² and Lz are still measured, as checks.
 
-For example, the n=64,L=40 run produced a state with <L2>=5.9822 and l_effective
-about 1.9964, but L2 standard deviation about 1.3644. A mean close to 6 is
-insufficient to certify a pure l=2 state. Enlarge the domain and refine the grid
-separately before drawing physical conclusions. The default is an executable
-demonstration, not an accuracy threshold.
+### What can go wrong
 
-This implementation does not assign n/l/m, and it never mixes vectors from
-different energies into textbook shapes.
+- **A cut group.** If `states` ends in the middle of an equal-energy group,
+  that group cannot be sorted. It is left unchanged and a NOTE is printed;
+  increase `states`.
+- **No symmetry.** If V has no mirror symmetry, for example a tilted custom
+  potential, nothing is changed.
+- **Axis choice.** Using the x ↔ y swap makes z the special axis, as textbooks
+  do.
 
-## Optional basis choice after the solve
+## Reading the angular-momentum numbers
 
-`basis = "symmetry"` runs `schrodinger3d/basis.py` after `eigsh` returns:
+With `angular_momentum = true`, the program prints these columns for every
+state and saves them in `outputs/checks/<picture name>_analysis.json`:
 
-1. Test which operations leave the sampled V unchanged: x->-x, y->-y, z->-z,
-   and the x<->y swap. Only those are used, so each commutes with the discrete
-   H. A custom V without them is left alone.
-2. Group states whose energies agree within 1e-8 * max(1, |E|).
-3. Inside each group, diagonalize the restricted operations one after another.
+| Column | Meaning |
+| --- | --- |
+| `<L2>` | Average of L². Values near 0, 2, and 6 suggest s, p, and d, because L² = l(l+1). |
+| `L2 std` | Spread of L². A large spread means the state is not a clean l. |
+| `l_eff` | The l that satisfies l(l+1) = `<L2>`. A diagnostic, not a label. |
+| `<Lz>` | Always 0 here, because the computed states are real. It carries no information. |
+| `Lz std` | Spread of Lz. About 0 for p_z and 3d_z2 (m = 0), about 1 for p_x and 3d_xz, about 2 for 3d_xy and 3d_x2-y2. |
 
-Vectors are recombined only inside one group, so every result is still an
-eigenvector of the same H, with the same energy. The default run reports
-residuals near 1e-14. Nearly degenerate groups, such as the cubic t2g and eg
-3d levels, are never mixed. The x<->y swap makes z the special axis, the same
-convention as textbook real orbitals.
+The operators are built from finite differences, for example
+Lz ψ = -i (x ∂ψ/∂y - y ∂ψ/∂x). On a grid they are approximate, especially near
+the walls. For example, state 13 (3s) has `<L2>` = 0.25 with a spread of 3.4,
+because the cube is small for it.
 
-For the default n=64, L=40 hydrogen run the measured signs are:
+## Limits of the default run
 
-| States | Rx, Ry, Rz | Pxy | Looks like |
-| --- | --- | --- | --- |
-| 1-3 | (-,+,+), (+,-,+), (+,+,-) | | p_x, p_y, p_z |
-| 5-7 | (-,-,+), (-,+,-), (+,-,-) | | d_xy, d_xz, d_yz |
-| 8-9 | (+,+,+) | -1, +1 | d_x2-y2, d_z2 |
-
-The last column is read from the measured signs and <L2>; it is not an input.
-A test compares the resulting d_z2 with the named-orbital mode on the same grid
-only as an independent check; their overlap is 1 to eight decimal places.
-
-Why reflections rather than L2 and Lz: on a cubic grid they commute with H only
-approximately. Inside each exactly degenerate group L2 is constant, and Lz
-cannot separate the eg pair because its restricted matrix is zero. Building
-m=+/-2 states would mix the t2g and eg groups, which have different energies
-on the grid; on a 40^3 test grid the residual then rose to about 1e-4. The
-reflections and the swap commute with the discrete H exactly. L2 and Lz remain
-measurements of the result.
-
-If the requested state count cuts a group, its span is not closed under the
-operations. That group is left unrotated and a note is printed; increase
-`states` to complete it.
-
-## Outputs and comparison
-
-- `outputs/plots/`: cuts and optional 3D isosurface of the selected state.
-  The symmetry basis adds `_symbasis` to the file name.
-- `outputs/checks/*_analysis.json`: all energies, residuals, probability checks,
-  angular moments/spreads, symmetry eigenvalues, and basis-choice flags.
-- `plot.cmd`: general full-grid mode, usually without angular reports.
-- `hydrogen.cmd`: the older named-orbital mode with `method="symmetry"`.
+- The grid is coarse: 1s comes out at -0.463 instead of -0.5.
+- The cube is small for the n = 3 states: about 1-4% of their probability sits
+  in the outer grid points next to the walls.
+- A cubic grid splits energies that are equal in free space: 2s and 2p
+  separate, and 3d splits into a group of 3 and a group of 2.
 
 Sources: [Cartesian angular momentum](https://farside.ph.utexas.edu/teaching/sm1/Thermalhtml/node148.html),
 [MIT notes on common eigenbases and degeneracy](https://www.ocw.mit.edu/courses/8-04-quantum-physics-i-spring-2013/9ccc9fd132124dd102e1a7863e6e12ce_MIT8_04S13_OnCommEigenbas.pdf).

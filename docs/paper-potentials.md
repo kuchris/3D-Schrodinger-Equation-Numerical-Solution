@@ -1,68 +1,61 @@
-# Potential presets from the paper
+# Potentials from the paper
 
 Source: Wai Kui Wong, [Solving 3D Time Independent Schrodinger Equation Using
 Numerical Method](https://doi.org/10.13140/RG.2.2.13878.01602/1), December 2021.
-The accessible [ResearchGate full text](https://www.researchgate.net/publication/357203546_Solving_3D_Time_Independent_Schrodinger_Equation_Using_Numerical_Method)
-was checked against Section IV and Appendix A.
+The formulas were checked against Section IV and Appendix A of the
+[ResearchGate full text](https://www.researchgate.net/publication/357203546_Solving_3D_Time_Independent_Schrodinger_Equation_Using_Numerical_Method).
 
-Select a preset by changing `simulation.potential` in `config/settings.toml`.
-The formulas are named functions in [`schrodinger3d/potentials.py`](../schrodinger3d/potentials.py).
-Here `L` is `simulation.length`, and `rho = sqrt(x**2 + y**2)`.
+Choose a preset with `potential = "..."` in `config/settings.toml`. The code is
+in [potentials.py](../schrodinger3d/potentials.py). In the table, `L` is the
+cube side `length` and `rho = sqrt(x**2 + y**2)`.
 
-| Setting | Formula | Paper location |
+| Setting | Formula | Where in the paper |
 | --- | --- | --- |
-| `box` | `0` inside the cube, with zero wavefunction on the faces | IV.A, p. 5 |
+| `box` | `0` inside the cube, with ψ = 0 on the faces | IV.A, p. 5 |
 | `paper_harmonic` | `0.0001 * (x**2 + y**2 + z**2) / 2` | IV.B, Eq. (29), p. 10 |
-| `circular` | `200 * (1 - square(2.1*pi*rho/L + (z/L)**2))` | IV.C; executable SP expression in Appendix A, p. 58 |
+| `circular` | `200 * (1 - square(2.1*pi*rho/L + (z/L)**2))` | IV.C; code in Appendix A, p. 58 |
 | `torus` | `(rho/L - 0.4)**2 + (z/L)**2 - 0.1**2` | IV.D, Eq. (31), p. 21 |
 | `tanh` | `tanh((x/L)**2 + (y/L)**2)` | IV.E, Eq. (32), p. 27 |
 | `hydrogen` | `-1 / sqrt(x**2 + y**2 + z**2)` | IV.F, Eq. (33), p. 32 |
 
-The existing `harmonic` option remains the separate `omega=1` benchmark,
-`V = (x**2 + y**2 + z**2) / 2`. `custom` still reads `custom/potential.py`.
+Two more options are not from the paper: `harmonic` is `(x**2 + y**2 + z**2) / 2`,
+whose exact energies are known, and `custom` reads `custom/potential.py`.
 
-## Source details
+## Notes on individual presets
 
-- Torus: Section IV.D specifies `R=0.4L` and `r=0.1L`; these values are used.
-  Appendix A's active example instead uses `R=0.3L`. The latter is not the
-  default for the paper preset.
-- Circular well: Eq. (30) is garbled in the accessible text extraction.
-  This preset therefore follows the explicit `scipy.signal.square` expression
-  printed in Appendix A. The `z**2` term is outside the square root. It is not
-  silently replaced with a conventional spherical step potential, and equivalence
-  to the typeset Eq. (30) has not been visually confirmed. `square` means the
-  periodic square-wave function; the returned potential takes values 0 and 400.
-- Tanh: Eq. (32) contains x and y only. The preset retains this z independence;
-  the cube boundary still confines the wavefunction in z.
-- Torus: the `-0.1**2` term shifts the energy zero. That constant does not
-  change the eigenfunctions or set their transverse width.
+- **Torus.** Section IV.D gives a ring radius R = 0.4L and a tube radius
+  r = 0.1L, which are used here. The example in Appendix A uses R = 0.3L
+  instead. The `-0.1**2` term only shifts every energy by the same amount; it
+  does not change ψ or set the width of the ring.
+- **Circular well.** Eq. (30) is garbled in the available text, so this preset
+  copies the code printed in Appendix A. There, `square` is SciPy's periodic
+  square wave, so V is either 0 or 400. The z term sits outside the square
+  root, so this is not a simple spherical well. It has not been checked
+  against the typeset Eq. (30).
+- **Tanh.** Eq. (32) contains only x and y. Only the cube walls confine ψ in z.
+- **Hydrogen.** The exact -1/r is used, with no smoothing. The grid must not
+  contain r = 0, so an odd n is raised to the next even n, and the program says
+  so. Calling `make_potential` directly on a grid that contains the origin
+  raises an error.
 
-## Units and reproduction limits
+## Why the energies differ from the paper
 
-These are the paper's potential functions evaluated directly in the new
-solver's model energy units, with `hbar=mass=1`. They are not a claim to
-reproduce the paper's original numerical spectra or figures.
+The formulas are the paper's, but the units are this program's (ħ = m = 1):
 
-The paper's Eq. (25) and Appendix A instead use a grid-scaled Hamiltonian:
-`H_scaled = -0.5 * D3 + U`, with `U = h**2 * V` for mass=1. This solver uses
-`H = -0.5 * D3 / h**2 + V`. Copying a numerical U coefficient directly into V
-does not preserve the old kinetic-to-potential ratio. A strict reproduction
-would also need the original grid, boundaries, scaling, and energy selection.
-The presets retain fixed functions when refining the grid in this solver.
+- The paper (Eq. (25) and Appendix A) scales its matrix by the grid spacing:
+  `H_scaled = -0.5 * D3 + U`, with `U = h**2 * V`.
+- This program uses `H = -0.5 * D3 / h**2 + V`.
 
-The weak `paper_harmonic` case is strongly affected by the finite box at L=8.
-For all cases, check both grid spacing and box size before physical comparisons.
-In generic energy-index mode, only `box` and the omega=1 `harmonic` preset show
-analytical reference curves. The separate [named hydrogen orbital mode](hydrogen-orbitals.md)
-also compares the selected numerical state with its infinite-space energy.
+So the same coefficient gives a different strength, and the paper's energies
+and figures are not expected to be reproduced. An exact reproduction would also
+need the paper's grid, boundaries, and scaling. Here the potential stays the
+same function when you refine the grid.
 
-## Coulomb singularity
+Also keep in mind:
 
-The hydrogen preset keeps the exact point-sampled `-1/r` formula. It adds no
-softening parameter or arbitrary finite value at the origin. The app changes
-an odd n to the next even n and reports the adjustment. This gives a symmetric
-interior grid that does not contain the origin. Calling `make_potential`
-directly on a grid containing the origin raises a clear error.
+- `paper_harmonic` is very weak, so at a cube side of 8 the walls dominate.
+- In the energy panel, only `box` and `harmonic` show exact reference energies.
+- Check the grid spacing and the cube size before comparing any numbers.
 
-For example, start with n=40, L=20, and state=0, then check convergence. These
-numbers are an example configuration, not a certified accuracy threshold.
+For hydrogen, a reasonable first run is n = 40, a cube side of 20, and
+state = 0, followed by a convergence check.

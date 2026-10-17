@@ -1,129 +1,96 @@
-# From a potential function to a numerical orbital
+# How the solver works
 
-## 1. Define the physical problem
+This page follows one calculation from the potential to the picture. The same
+steps appear in code in [examples/basic_usage.py](../examples/basic_usage.py).
 
-The solver uses model units with hbar=mass=1:
+## 1. The equation
 
-```text
-H psi = E psi
-H = -0.5 * Laplacian + V(x,y,z)
-```
-
-`schrodinger3d/potentials.py` supplies the preset functions. The user function
-is in `custom/potential.py`. Hydrogen uses -1/r without softening. The model
-is a single nonrelativistic particle in a finite cube with zero wavefunction
-on its six faces. These boundary conditions affect extended states.
-
-## 2. Replace derivatives by finite differences
-
-For n unknown interior points on each axis, h=L/(n+1). The known zero values
-at the cube faces are outside the unknown vector. The second derivative is:
+The program looks for stationary states of one particle:
 
 ```text
-psi_xx(i,j,k) = [psi(i-1,j,k) - 2*psi(i,j,k) + psi(i+1,j,k)] / h**2
+H ψ = E ψ,    H = -½ ∇² + V(x, y, z)
 ```
 
-The y and z terms have the same form. Kronecker sums assemble the seven-point
-3D stencil into a sparse matrix. V is added as a diagonal matrix. The input
-potential and output energy have the same energy units; V is not multiplied
-by another grid-spacing factor.
+The units are ħ = m = 1. The particle lives in a cube of side `length`, and
+ψ = 0 on its six faces, like hard walls. There is no time evolution.
 
-## 3. Solve the discrete eigenproblem
+## 2. Put space on a grid
 
-`solve_lowest_states` calls `eigsh` with `which="SA"`, selecting the lowest
-algebraic energies, including negative values. It searches beyond the requested
-cutoff to help resolve repeated energies, then sorts and keeps the requested
-states. This is not a proof of complete degeneracy recovery.
+Each axis gets `n` equally spaced points inside the cube, with spacing
+h = length / (n + 1). The walls themselves are not stored, because ψ is known
+to be 0 there. So ψ becomes a list of n³ numbers, one per grid point.
 
-Each state is normalized with the volume element:
+## 3. Turn derivatives into differences
+
+A second derivative at a point is estimated from its two neighbours:
 
 ```text
-sum(abs(psi)**2) * h**3 = 1
+ψ''(x) ≈ [ψ(x - h) - 2 ψ(x) + ψ(x + h)] / h²
 ```
 
-Arrays use C order, with z varying fastest:
+Doing this along x, y, and z builds the Laplacian from each point and its six
+neighbours. A neighbour outside the cube counts as 0. The potential is simply
+multiplied point by point, so V is used as given, in energy units.
+
+The result is a large matrix H of size n³ × n³ that is almost entirely zeros
+(a sparse matrix). With n = 64 there are 262,144 unknowns. In code this is
+`build_hamiltonian` in [solver.py](../schrodinger3d/solver.py).
+
+## 4. Find the lowest energies
+
+`solve_lowest_states` asks SciPy's `eigsh` for the eigenvalues with the lowest
+values, negative ones included. Internally it asks for 8 more than requested,
+which helps it find every member of a group of equal energies, and then keeps
+the requested number.
+
+Each ψ is scaled so that the total probability is 1:
+
+```text
+sum of |ψ|² × h³ = 1
+```
+
+States with equal energies come back as an arbitrary mix. Full-grid mode can
+sort them afterwards; see [full-grid mode](direct-hamiltonian.md). If the
+requested number of states ends in the middle of such a group, the group is
+cut, so ask for a few more states than you need.
+
+## 5. Check the answer
+
+For every state the program reports a residual, the size of Hψ - Eψ relative
+to ψ. A value around 10⁻¹⁴ means the matrix equation is solved. It does not
+mean that the grid is fine enough or the cube big enough.
+
+To check the physics, repeat with a smaller spacing at the same `length`, and
+with a bigger `length` at the same spacing. Trust the digits that stop
+changing. Look at ψ as well, because errors in the energy can cancel.
+
+## 6. Draw the result
+
+[display.py](../schrodinger3d/display.py) and [plotting.py](../schrodinger3d/plotting.py)
+change only how ψ is shown, never ψ itself.
+
+- **Centre cuts.** With an even n there is no grid point at 0, so ψ is
+  interpolated to 0 first and squared afterwards. Squaring first would wrongly
+  fill in a node. A cut where ψ is almost 0 everywhere is labelled as a nodal
+  plane.
+- **Auto zoom** chooses the smallest centred cube that holds at least 99.5% of
+  the probability.
+- **Log density** shows values down to 10⁻⁴ of the peak.
+- **3D surface** is drawn where the density equals 4% of its peak. Red and
+  blue show the sign of ψ.
+
+## Array layout (for programmers)
 
 | Quantity | Shape |
 | --- | --- |
 | Coordinates | (n,) |
-| Potential | (n,n,n) |
-| Sparse Hamiltonian | (n**3,n**3) |
-| Energies | (number_of_states,) |
-| Wavefunctions | (n**3,number_of_states), one state per column |
+| Potential | (n, n, n) |
+| H | (n³, n³), sparse |
+| Energies | (k,) for k states |
+| Wavefunctions | (n³, k), one state per column |
 
-Generic `state=4` means the fifth returned eigenvector. It does not mean a
-principal quantum number of four, or specify a p/d orbital orientation.
+Arrays use C order, so z changes fastest. To get state i as a 3D array, use
+`wavefunctions[:, i].reshape(n, n, n)`.
 
-## 4. Optional hydrogen symmetry selection
-
-This is `method="symmetry"`. For `method="full"`, the entire Cartesian matrix is
-solved without this step. Optional [post-solve angular measurements](direct-hamiltonian.md)
-do not alter those full-grid eigenvectors.
-
-This step is only used for the named hydrogen mode. It still solves the same
-Cartesian finite-difference Hamiltonian. It does not insert an analytical R(r)
-or spherical harmonic into the plotted wavefunction.
-
-The Coulomb potential and centered cubic box are invariant under reflections
-and coordinate permutations. Their operators commute with the discrete H.
-We therefore select eigenstates in an appropriate symmetry sector.
-
-For example, a p_z-like state is even in x and y and odd in z:
-
-```text
-psi(-x,y,z) = +psi(x,y,z)
-psi(x,-y,z) = +psi(x,y,z)
-psi(x,y,-z) = -psi(x,y,z)
-```
-
-On an even grid, solve on the positive octant and mirror the values with these
-signs. This reduces the unknown count by eight. At the first point h/2 on an
-axis, the ghost value is sigma*psi(h/2), where sigma is +1 or -1. The stencil is:
-
-```text
-psi_xx(h/2) = [psi(3h/2) + (-2+sigma)*psi(h/2)] / h**2
-```
-
-Relative to the ordinary kinetic diagonal, this adds -sigma/(2*h**2).
-This is an exact restriction of the original discrete matrix to that reflection
-sector. Reconstructing the full cube and dividing by sqrt(8) preserves the norm.
-
-For s and selected real d orientations, coordinate permutations project the
-computed eigenvectors into a suitable cubic symmetry representation. For
-example, subtracting the x/y-swapped vector isolates an x2-y2-like combination;
-permuting and combining that numerical vector gives the z2-like orientation.
-The low supported labels use the ordering within these sectors to select the
-radial excitation. This is not a general classifier for all n,l,m states.
-
-A finite cube has cubic rather than full rotational symmetry. The selected
-states approach the named free-atom orbitals as grid and box errors are reduced;
-they are not exact continuum L2 eigenstates on every finite grid.
-
-## 5. Draw the computed data
-
-`schrodinger3d/plotting.py` orchestrates the calculation; `display.py` handles
-the display operations:
-
-- Central cuts interpolate psi to zero before taking abs(psi)**2. This preserves
-  an odd orbital's nodal plane. An almost-zero plane is labeled as a node.
-- Auto framing retains at least 99.5% of the probability sampled inside the
-  computational box. It changes axis limits, not the wavefunction.
-- Log density reveals values down to 1e-4 of the sampled peak. It changes the
-  color mapping, not the density.
-- A 3D isosurface marks density equal to 4% of its peak. Red/blue encode the
-  signs of psi. This surface is a display threshold, not a hard orbital edge.
-
-## 6. Check numerical and physical accuracy separately
-
-The tests reconstruct symmetry-selected states and apply the original full-grid
-Hamiltonian. They check eigenpair residuals, parity, normalization, nodal planes,
-and the displayed probability fraction. An analytical orbital appears only in
-a comparison test, never in the runtime wavefunction generation.
-
-Small residuals mean the matrix eigenproblem is solved accurately. Physical
-accuracy also requires fixing L while reducing h, then fixing h while enlarging
-L. Energy errors can cancel, so inspect the wavefunction as well. An E>=0
-Coulomb box state is not a free-atom bound orbital. Named mode rejects it.
-
-See [hydrogen details and measured example](hydrogen-orbitals.md) and
-[paper formula sources](paper-potentials.md).
+The hydrogen symmetry shortcut used by `hydrogen.cmd` is explained in
+[named hydrogen orbitals](hydrogen-orbitals.md).
