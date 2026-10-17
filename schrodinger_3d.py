@@ -3,6 +3,8 @@
 Model units: hbar = mass = 1.
 Equation: H psi = E psi, with H = -0.5 * Laplacian + V.
 Boundary condition: psi = 0 on the six faces of the cube.
+Potential formulas live in potentials.py. For a short complete usage example,
+start with example.py.
 """
 
 import argparse
@@ -11,17 +13,8 @@ import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import eigsh
 
-
-POTENTIAL_LABELS = {
-    "box": "Particle in a 3D box",
-    "harmonic": "3D harmonic oscillator",
-    "paper_harmonic": "Paper harmonic potential (Eq. 29)",
-    "circular": "Circular well (paper Appendix A)",
-    "torus": "Torus potential (Eq. 31)",
-    "tanh": "Tanh potential (Eq. 32)",
-    "hydrogen": "Hydrogen-like Coulomb potential (Eq. 33)",
-    "custom": "Custom potential V(x, y, z)",
-}
+# Re-export these names so existing scripts keep working after the module split.
+from potentials import POTENTIAL_LABELS, make_potential
 
 
 def make_grid(n, length):
@@ -40,75 +33,12 @@ def make_grid(n, length):
     return coordinates, spacing
 
 
-def make_potential(coordinates, kind, length=None):
-    """Return V[i, j, k] = V(x[i], y[j], z[k]) in model energy units.
-
-    For kind="custom", edit V in custom_potential.py. Do not multiply
-    V by spacing**2: build_hamiltonian already includes that scale in T.
-    """
-    x, y, z = np.meshgrid(
-        coordinates, coordinates, coordinates, indexing="ij"
-    )
-    if length is None:
-        length = (coordinates[1] - coordinates[0]) * (len(coordinates) + 1)
-
-    if kind == "box":
-        # Infinite walls come from the boundary condition, not from V.
-        return np.zeros_like(x)
-    if kind == "harmonic":
-        # V = (mass * omega**2 / 2) * r**2, with mass = omega = 1.
-        return 0.5 * (x**2 + y**2 + z**2)
-    if kind == "paper_harmonic":
-        # Section IV.B, Eq. (29). Keep the paper's coefficient explicit.
-        return 0.0001 * (x**2 + y**2 + z**2) / 2
-    if kind == "circular":
-        from scipy.signal import square
-
-        # Appendix A's executable SP expression. z**2 is OUTSIDE sqrt.
-        # This is not a replacement by a conventional spherical step well.
-        phase = 2.1 * np.pi * np.sqrt((x / length)**2 + (y / length)**2)
-        return 200 * (1 - square(phase + (z / length)**2))
-    if kind == "torus":
-        # Section IV.D, Eq. (31): R = 0.4 L, r = 0.1 L.
-        radius_xy = np.sqrt((x / length)**2 + (y / length)**2)
-        return (radius_xy - 0.4)**2 + (z / length)**2 - 0.1**2
-    if kind == "tanh":
-        # Section IV.E, Eq. (32) depends on x and y only, not on z.
-        return np.tanh((x / length)**2 + (y / length)**2)
-    if kind == "hydrogen":
-        radius = np.sqrt(x**2 + y**2 + z**2)
-        spacing = length / (len(coordinates) + 1)
-        if np.any(radius < spacing * 1e-10):
-            raise ValueError(
-                "The Coulomb potential is singular at the origin. "
-                "Use an even n (the plotting app adjusts odd n automatically)."
-            )
-        return -1 / radius
-    if kind == "custom":
-        from custom_potential import V
-
-        values = np.asarray(V(x, y, z))
-        if np.iscomplexobj(values):
-            raise ValueError("custom_potential.V must return real values.")
-        try:
-            values = np.broadcast_to(values, x.shape).astype(float, copy=True)
-        except (TypeError, ValueError) as error:
-            raise ValueError(
-                "custom_potential.V must return numeric values broadcastable "
-                f"to the grid shape {x.shape}; got shape {values.shape}."
-            ) from error
-        if not np.all(np.isfinite(values)):
-            raise ValueError("custom_potential.V contains NaN or infinity.")
-        return values
-
-    raise ValueError(f"Unknown potential: {kind}")
-
-
 def build_hamiltonian(potential, spacing):
     """Build the sparse Hamiltonian for a uniform cubic grid.
 
     Arrays and eigenvectors use NumPy's C order: z varies fastest.
     The same spacing is used in all three directions.
+    Input potential shape: (n, n, n). Output sparse matrix shape: (n**3, n**3).
     """
     if np.iscomplexobj(potential):
         raise ValueError("potential must be real for this solver.")
@@ -150,6 +80,7 @@ def solve_lowest_states(hamiltonian, number_of_states, spacing):
 
     Normalize each state so sum(abs(psi)**2) * spacing**3 = 1.
     Eigenvalues are in the same energy units as the input potential.
+    Output shapes: energies (number_of_states,), wavefunctions (n**3, number_of_states).
     """
     size = hamiltonian.shape[0]
     if not 1 <= number_of_states < size:

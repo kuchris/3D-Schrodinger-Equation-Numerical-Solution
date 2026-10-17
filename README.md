@@ -141,13 +141,47 @@ model, a sufficiently large box.
 
 ## Read the code
 
-Follow `main()` from top to bottom:
+Start with [example.py](example.py): a short, complete calculation with four
+steps and no command-line parsing. It runs the harmonic benchmark and prints
+the energies and probability integral:
+
+```powershell
+.\.venv\Scripts\python.exe example.py
+```
+
+| File | Responsibility | Read or edit it when... |
+| --- | --- | --- |
+| `example.py` | Complete calculation in a short script | You want to follow the physics workflow |
+| `potentials.py` | Named potential formulas and preset selection | You want to inspect a preset formula or its parameters |
+| `schrodinger_3d.py` | Grid, finite-difference Hamiltonian, eigenstates | You want to understand the numerical method |
+| `custom_potential.py` | Your editable `V(x, y, z)` | You want to supply your own potential |
+| `settings.toml` | Plot and simulation choices | You want to change the model, grid, or selected state |
+| `plot_states.py` | Settings loading, slices, and energy plot | You want to change how results are displayed |
+| `test_physics.py` | Checks against independent numerical/physical expectations | You want to verify the implementation |
+
+The numerical workflow is:
 
 1. `make_grid`: construct the interior grid points.
-2. `make_potential`: define the potential at each point.
+2. `make_potential` in `potentials.py`: evaluate the selected formula at each point.
 3. `build_hamiltonian`: assemble the kinetic and potential energy matrices.
 4. `solve_lowest_states`: compute, sort, and normalize the lowest eigenstates.
 5. Check energies, total probability, and eigenpair residuals.
+
+Inside `potentials.py`, each formula has its own function. For example,
+`torus_potential` names the major radius, minor radius, radial term, axial term,
+and energy offset. `make_potential` selects the formula; it does not contain
+the formula's implementation. Existing imports of `make_potential` from
+`schrodinger_3d.py` remain supported.
+
+### Arrays and settings
+
+- `coordinates`: shape `(n,)`; the interior positions along each axis.
+- `potential`: shape `(n, n, n)`; one potential energy per grid point.
+- `hamiltonian`: shape `(n**3, n**3)`; a sparse matrix.
+- `energies`: shape `(number_of_states,)`, sorted from lowest to highest.
+- `wavefunctions`: shape `(n**3, number_of_states)`; each column is one state.
+- `states = 10` requests at least ten eigenstates; `state = 4` selects the fifth
+  member of the energy-sorted list for plotting, counting degeneracies.
 
 ## Units and conventions
 

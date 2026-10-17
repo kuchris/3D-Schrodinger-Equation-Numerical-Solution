@@ -5,11 +5,10 @@ from unittest.mock import patch
 
 import numpy as np
 
+from potentials import POTENTIAL_LABELS, make_potential
 from schrodinger_3d import (
-    POTENTIAL_LABELS,
     build_hamiltonian,
     make_grid,
-    make_potential,
     solve_lowest_states,
 )
 

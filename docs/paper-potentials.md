@@ -6,6 +6,7 @@ The accessible [ResearchGate full text](https://www.researchgate.net/publication
 was checked against Section IV and Appendix A.
 
 Select a preset by changing `simulation.potential` in `settings.toml`.
+The formulas are named functions in [`potentials.py`](../potentials.py).
 Here `L` is `simulation.length`, and `rho = sqrt(x**2 + y**2)`.
 
 | Setting | Formula | Paper location |

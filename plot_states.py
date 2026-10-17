@@ -18,11 +18,10 @@ matplotlib.use("Agg")  # Save figures without opening a desktop window.
 import matplotlib.pyplot as plt
 import numpy as np
 
+from potentials import POTENTIAL_LABELS, make_potential
 from schrodinger_3d import (
-    POTENTIAL_LABELS,
     build_hamiltonian,
     make_grid,
-    make_potential,
     solve_lowest_states,
 )
 
@@ -45,6 +44,44 @@ def reference_energies(kind, length, count):
             (a + 1)**2 + (b + 1)**2 + (c + 1)**2
         )
     return np.sort(energies.ravel())[:count]
+
+
+def draw_energy_levels(ax, energies, kind, length, state):
+    """Draw computed energies, an optional reference, and the selected state."""
+    index = np.arange(len(energies))
+    reference = reference_energies(kind, length, len(energies))
+    if reference is not None:
+        ax.plot(index, reference, "o", ms=9, mfc="none", mec="#197568", mew=1.5,
+                label="Continuum reference")
+    ax.plot(index, energies, "_", ms=14, mew=2.3, color="#c65c29",
+            label="Finite difference")
+    if state > 0:
+        ax.plot(state, energies[state], "*", ms=13, color="#2454a0",
+                label=f"Selected state {state}")
+    ax.set(xlabel="State index (including degeneracy)", ylabel="Energy",
+           title="Lowest energy levels", xticks=index)
+    ax.grid(axis="y", alpha=0.18)
+    ax.legend(loc="lower right", fontsize=9)
+    annotation = f"State {state}: {energies[state]:.6f}"
+    if reference is not None:
+        error = abs(energies[state] - reference[state]) / abs(reference[state])
+        annotation += f"\nReference: {reference[state]:.6f}\nRelative difference: {error:.3%}"
+    else:
+        annotation += "\nAnalytical reference: not supplied"
+    # Put the annotation inside the largest energy gap, away from the levels.
+    all_levels = np.sort(np.r_[energies, reference]) if reference is not None else energies
+    if len(energies) > 1:
+        gap = int(np.argmax(np.diff(all_levels)))
+        annotation_y = all_levels[gap] + 0.85 * np.diff(all_levels)[gap]
+    else:
+        padding = 0.15 * max(1, abs(energies[0]))
+        ax.set_ylim(all_levels.min() - padding, all_levels.max() + padding)
+        ax.set_xlim(-0.6, 0.6)
+        annotation_y = all_levels.max() + 0.7 * padding
+    ax.text(0.04, annotation_y,
+            annotation,
+            transform=ax.get_yaxis_transform(), va="top", fontsize=10,
+            bbox={"facecolor": "white", "edgecolor": "#dddddd", "alpha": 0.9})
 
 
 def plot_summary(coordinates, spacing, length, energies, wavefunctions, kind, output,
@@ -96,41 +133,8 @@ def plot_summary(coordinates, spacing, length, energies, wavefunctions, kind, ou
 
     fig.colorbar(contour, ax=density_axes, shrink=0.75, label=color_label)
 
-    ax = fig.add_subplot(grid[1, 1])
-    index = np.arange(len(energies))
-    reference = reference_energies(kind, length, len(energies))
-    if reference is not None:
-        ax.plot(index, reference, "o", ms=9, mfc="none", mec="#197568", mew=1.5,
-                label="Continuum reference")
-    ax.plot(index, energies, "_", ms=14, mew=2.3, color="#c65c29",
-            label="Finite difference")
-    if state > 0:
-        ax.plot(state, energies[state], "*", ms=13, color="#2454a0",
-                label=f"Selected state {state}")
-    ax.set(xlabel="State index (including degeneracy)", ylabel="Energy",
-           title="Lowest energy levels", xticks=index)
-    ax.grid(axis="y", alpha=0.18)
-    ax.legend(loc="lower right", fontsize=9)
-    annotation = f"State {state}: {energies[state]:.6f}"
-    if reference is not None:
-        error = abs(energies[state] - reference[state]) / abs(reference[state])
-        annotation += f"\nReference: {reference[state]:.6f}\nRelative difference: {error:.3%}"
-    else:
-        annotation += "\nAnalytical reference: not supplied"
-    # Put the annotation inside the largest energy gap, away from the levels.
-    all_levels = np.sort(np.r_[energies, reference]) if reference is not None else energies
-    if len(energies) > 1:
-        gap = int(np.argmax(np.diff(all_levels)))
-        annotation_y = all_levels[gap] + 0.85 * np.diff(all_levels)[gap]
-    else:
-        padding = 0.15 * max(1, abs(energies[0]))
-        ax.set_ylim(all_levels.min() - padding, all_levels.max() + padding)
-        ax.set_xlim(-0.6, 0.6)
-        annotation_y = all_levels.max() + 0.7 * padding
-    ax.text(0.04, annotation_y,
-            annotation,
-            transform=ax.get_yaxis_transform(), va="top", fontsize=10,
-            bbox={"facecolor": "white", "edgecolor": "#dddddd", "alpha": 0.9})
+    energy_axis = fig.add_subplot(grid[1, 1])
+    draw_energy_levels(energy_axis, energies, kind, length, state)
 
     name = POTENTIAL_LABELS[kind]
     title = "Probability density" if quantity == "density" else "Signed wavefunction"
