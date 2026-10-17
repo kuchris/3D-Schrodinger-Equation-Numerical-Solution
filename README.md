@@ -87,13 +87,33 @@ The settings file only controls `plot_states.py`; the standalone solver keeps
 its own command-line options.
 
 Each image shows the selected state's central XY, XZ, and YZ slices, plus
-computed energies. Built-in potentials also show continuum reference levels;
-custom potentials have no assumed analytical reference. All three slices share
+computed energies. Only `box` and the omega=1 `harmonic` benchmark show continuum
+reference levels; other presets have no assumed analytical reference. All three slices share
 one color scale. These are local slices, not integrated projections.
 The default odd grid size, `n=25`, includes zero exactly; an even grid uses the
 nearest available coordinate and labels its actual position.
 
 Plotting lives in `plot_states.py`, keeping it separate from the solver.
+
+## Available potentials
+
+| `simulation.potential` | Potential |
+| --- | --- |
+| `box` | Paper's infinite cubic well |
+| `paper_harmonic` | Paper's harmonic potential, coefficient 0.0001/2 |
+| `circular` | Paper Appendix A's square-wave well |
+| `torus` | Paper's torus, R=0.4L and r=0.1L |
+| `tanh` | Paper's tanh potential, independent of z |
+| `hydrogen` | Paper's hydrogen-like Coulomb potential, -1/r |
+| `harmonic` | Separate omega=1 harmonic benchmark |
+| `custom` | Your function in `custom_potential.py` |
+
+For example, set `potential = "torus"` and double-click `plot.cmd`.
+The six paper presets use their functions in the new solver's model units;
+they do not reproduce the old grid-scaled spectra automatically.
+See [paper formulas and source details](docs/paper-potentials.md) for equation
+locators, the circular-well extraction ambiguity, and the torus parameter choice.
+Hydrogen uses an even grid to avoid r=0; an odd n is increased by one and reported.
 
 ## Excited states
 
@@ -198,5 +218,8 @@ it does not establish convergence to the continuum solution.
 
 `test_physics.py` checks the pointwise stencil, exact discrete box spectrum,
 volume normalization, negative energy shifts, and second-order convergence
-to the continuum box energy. The solver handles the stationary equation
+to the continuum box energy. It also checks each paper preset, the separable
+weak harmonic solution, torus radius and energy offset, circular-well step
+values, tanh z independence, and unsmoothed Coulomb values and origin handling.
+The solver handles the stationary equation
 (TISE); time evolution is not implemented.

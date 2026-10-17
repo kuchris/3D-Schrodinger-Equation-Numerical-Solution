@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from schrodinger_3d import (
+    POTENTIAL_LABELS,
     build_hamiltonian,
     make_grid,
     make_potential,
@@ -32,8 +33,8 @@ def reference_energies(kind, length, count):
     Harmonic reference: infinite space, omega = 1.
     Box reference: Dirichlet cube of side length `length`.
     """
-    if kind == "custom":
-        return None  # Arbitrary user functions have no assumed exact spectrum.
+    if kind not in ("box", "harmonic"):
+        return None  # No assumed exact spectrum for the other presets.
     # An axis quantum number above count cannot enter the first count states.
     modes = np.arange(count + 1)
     a, b, c = np.meshgrid(modes, modes, modes, indexing="ij")
@@ -131,8 +132,7 @@ def plot_summary(coordinates, spacing, length, energies, wavefunctions, kind, ou
             transform=ax.get_yaxis_transform(), va="top", fontsize=10,
             bbox={"facecolor": "white", "edgecolor": "#dddddd", "alpha": 0.9})
 
-    name = {"harmonic": "3D harmonic oscillator", "box": "Particle in a 3D box",
-            "custom": "Custom potential V(x, y, z)"}[kind]
+    name = POTENTIAL_LABELS[kind]
     title = "Probability density" if quantity == "density" else "Signed wavefunction"
     fig.suptitle(f"{name} | State {state} | {title}", fontsize=17)
     interpretation = (
@@ -146,7 +146,9 @@ def plot_summary(coordinates, spacing, length, energies, wavefunctions, kind, ou
         + interpretation
         + {"harmonic": "Harmonic reference assumes infinite space.",
            "box": "Box reference uses the same cube boundaries.",
-           "custom": "Custom potential; no analytical reference supplied."}[kind],
+           "custom": "Custom potential; no analytical reference supplied."}.get(
+               kind, "Paper formula in model units; no analytical reference supplied."
+           ),
         fontsize=9,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -174,8 +176,8 @@ def read_settings(path):
                 raise ValueError(f"Invalid value type for {section}.{name}: {value!r}")
             defaults[name] = value
 
-    if defaults.get("potential", "harmonic") not in ("harmonic", "box", "custom"):
-        raise ValueError('simulation.potential must be "harmonic", "box", or "custom".')
+    if defaults.get("potential", "harmonic") not in POTENTIAL_LABELS:
+        raise ValueError(f"simulation.potential must be one of: {', '.join(POTENTIAL_LABELS)}")
     if defaults.get("quantity", "density") not in ("density", "wavefunction"):
         raise ValueError('plot.quantity must be "density" or "wavefunction".')
     if "output" in defaults:
@@ -190,7 +192,7 @@ def parse_arguments(argv=None):
                                default=Path(__file__).with_name("settings.toml"))
     config_args, _ = config_parser.parse_known_args(argv)
     parser = argparse.ArgumentParser(description=__doc__, parents=[config_parser])
-    parser.add_argument("--potential", choices=["box", "harmonic", "custom"], default="harmonic")
+    parser.add_argument("--potential", choices=list(POTENTIAL_LABELS), default="harmonic")
     parser.add_argument("--n", type=int, default=25, help="Odd n gives an exact central cut")
     parser.add_argument("--length", type=float, default=8)
     parser.add_argument("--states", type=int, default=10)
@@ -206,6 +208,9 @@ def parse_arguments(argv=None):
     args = parser.parse_args(argv)
     if args.n < 2:
         parser.error("--n / simulation.n must be at least 2.")
+    if args.potential == "hydrogen" and args.n % 2:
+        args.n += 1
+        print(f"Hydrogen: using even n={args.n} to avoid sampling r=0.")
     if not np.isfinite(args.length) or args.length <= 0:
         parser.error("--length / simulation.length must be finite and positive.")
     if args.state < 0:
@@ -226,7 +231,7 @@ def main():
           f"state: {args.state}; plot: {args.quantity}")
 
     coordinates, spacing = make_grid(args.n, args.length)
-    potential = make_potential(coordinates, args.potential)
+    potential = make_potential(coordinates, args.potential, length=args.length)
     hamiltonian = build_hamiltonian(potential, spacing)
     energies, wavefunctions = solve_lowest_states(hamiltonian, number_of_states, spacing)
     filename = (

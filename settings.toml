@@ -2,10 +2,12 @@
 
 [simulation]
 # "custom" = your function in custom_potential.py
-# Built-in alternatives: "harmonic" or "box"
+# Paper presets: "box", "paper_harmonic", "circular", "torus", "tanh", "hydrogen"
+# "harmonic" is the separate omega=1 analytical benchmark.
 potential = "custom"
 
 # Interior grid points per axis. An odd number includes the exact center.
+# For "hydrogen", odd n is increased by one to avoid the singular origin.
 n = 25
 
 # Cube side length. Each axis runs from -length/2 to +length/2.

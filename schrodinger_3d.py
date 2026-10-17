@@ -12,6 +12,18 @@ from scipy import sparse
 from scipy.sparse.linalg import eigsh
 
 
+POTENTIAL_LABELS = {
+    "box": "Particle in a 3D box",
+    "harmonic": "3D harmonic oscillator",
+    "paper_harmonic": "Paper harmonic potential (Eq. 29)",
+    "circular": "Circular well (paper Appendix A)",
+    "torus": "Torus potential (Eq. 31)",
+    "tanh": "Tanh potential (Eq. 32)",
+    "hydrogen": "Hydrogen-like Coulomb potential (Eq. 33)",
+    "custom": "Custom potential V(x, y, z)",
+}
+
+
 def make_grid(n, length):
     """Return n INTERIOR coordinates per axis and their spacing.
 
@@ -28,7 +40,7 @@ def make_grid(n, length):
     return coordinates, spacing
 
 
-def make_potential(coordinates, kind):
+def make_potential(coordinates, kind, length=None):
     """Return V[i, j, k] = V(x[i], y[j], z[k]) in model energy units.
 
     For kind="custom", edit V in custom_potential.py. Do not multiply
@@ -37,6 +49,8 @@ def make_potential(coordinates, kind):
     x, y, z = np.meshgrid(
         coordinates, coordinates, coordinates, indexing="ij"
     )
+    if length is None:
+        length = (coordinates[1] - coordinates[0]) * (len(coordinates) + 1)
 
     if kind == "box":
         # Infinite walls come from the boundary condition, not from V.
@@ -44,6 +58,32 @@ def make_potential(coordinates, kind):
     if kind == "harmonic":
         # V = (mass * omega**2 / 2) * r**2, with mass = omega = 1.
         return 0.5 * (x**2 + y**2 + z**2)
+    if kind == "paper_harmonic":
+        # Section IV.B, Eq. (29). Keep the paper's coefficient explicit.
+        return 0.0001 * (x**2 + y**2 + z**2) / 2
+    if kind == "circular":
+        from scipy.signal import square
+
+        # Appendix A's executable SP expression. z**2 is OUTSIDE sqrt.
+        # This is not a replacement by a conventional spherical step well.
+        phase = 2.1 * np.pi * np.sqrt((x / length)**2 + (y / length)**2)
+        return 200 * (1 - square(phase + (z / length)**2))
+    if kind == "torus":
+        # Section IV.D, Eq. (31): R = 0.4 L, r = 0.1 L.
+        radius_xy = np.sqrt((x / length)**2 + (y / length)**2)
+        return (radius_xy - 0.4)**2 + (z / length)**2 - 0.1**2
+    if kind == "tanh":
+        # Section IV.E, Eq. (32) depends on x and y only, not on z.
+        return np.tanh((x / length)**2 + (y / length)**2)
+    if kind == "hydrogen":
+        radius = np.sqrt(x**2 + y**2 + z**2)
+        spacing = length / (len(coordinates) + 1)
+        if np.any(radius < spacing * 1e-10):
+            raise ValueError(
+                "The Coulomb potential is singular at the origin. "
+                "Use an even n (the plotting app adjusts odd n automatically)."
+            )
+        return -1 / radius
     if kind == "custom":
         from custom_potential import V
 
@@ -120,17 +160,20 @@ def solve_lowest_states(hamiltonian, number_of_states, spacing):
     # SA = smallest algebraic: select the lowest energies, including negatives.
     # A random starting vector avoids selecting only even-parity states.
     initial_vector = np.random.default_rng(0).normal(size=size)
+    # Search beyond the requested cutoff so repeated energies have room to
+    # converge before keeping the requested lowest states.
+    candidate_count = min(size - 1, number_of_states + 8)
     energies, wavefunctions = eigsh(
         hamiltonian,
-        k=number_of_states,
+        k=candidate_count,
         which="SA",
         # A larger search space helps resolve repeated (degenerate) energies.
-        ncv=min(size, max(40, 4 * number_of_states + 1)),
+        ncv=min(size, max(40, 4 * candidate_count + 1)),
         tol=1e-10,
         v0=initial_vector,
     )
 
-    order = np.argsort(energies)
+    order = np.argsort(energies)[:number_of_states]
     energies = energies[order]
     wavefunctions = wavefunctions[:, order]
 
@@ -142,15 +185,18 @@ def solve_lowest_states(hamiltonian, number_of_states, spacing):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--potential", choices=["box", "harmonic", "custom"], default="harmonic")
+    parser.add_argument("--potential", choices=list(POTENTIAL_LABELS), default="harmonic")
     parser.add_argument("--n", type=int, default=24, help="Interior points per axis")
     parser.add_argument("--length", type=float, default=8.0, help="Cube side length")
     parser.add_argument("--states", type=int, default=6, help="Lowest states to calculate")
     args = parser.parse_args()
+    if args.potential == "hydrogen" and args.n % 2:
+        args.n += 1
+        print(f"Hydrogen: using even n={args.n} to avoid sampling r=0.")
 
     # 1. Define the space and potential.
     coordinates, spacing = make_grid(args.n, args.length)
-    potential = make_potential(coordinates, args.potential)
+    potential = make_potential(coordinates, args.potential, length=args.length)
 
     # 2. Discretize H and solve H psi = E psi.
     hamiltonian = build_hamiltonian(potential, spacing)
@@ -182,7 +228,7 @@ def main():
         print("\nInfinite-domain harmonic ground energy: 1.5")
         print("This calculation also has finite-box and finite-spacing errors.")
     else:
-        print("\nCustom V(x, y, z): no analytical reference supplied.")
+        print(f"\n{POTENTIAL_LABELS[args.potential]}: no analytical reference supplied.")
 
     # Example: state 0 as a 3D array; its probability density is abs(psi)**2.
     # psi = wavefunctions[:, 0].reshape(potential.shape, order="C")
