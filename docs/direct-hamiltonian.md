@@ -26,6 +26,7 @@ surface = true
 
 [analysis]
 angular_momentum = true
+basis = "symmetry"
 ```
 
 `schrodinger3d/direct.py` constructs the full Cartesian grid and the original
@@ -34,9 +35,10 @@ spacing to `solve_lowest_states`. The eigensolver selects the lowest algebraic
 energies from a seeded random starting vector.
 
 There is no n/l/m input, spherical harmonic, orbital template, parity sector,
-octant solve, or rotation of an eigenspace in this route. For n=64 the matrix
-has 262144 unknowns. `state=9` means the tenth energy-sorted vector; it does
-not request a particular orbital shape.
+or octant solve in this route. For n=64 the matrix has 262144 unknowns.
+`state=9` means the tenth energy-sorted vector; it does not request a
+particular orbital shape. The optional basis choice described below happens
+only after the eigensolve.
 
 After the eigensolver returns, the measurement pass reads each eigenvector
 without modifying it. Tests verify full-grid dimensions, agreement with an
@@ -68,7 +70,8 @@ inspection. It is not a guaranteed quantum-number classification. In particular,
 H alone determines energies and energy eigenspaces. A degenerate eigenspace
 does not specify a unique p_x, p_y, p_z, or n/l/m basis. The raw returned vectors
 can differ in orientation or combination between implementations while having
-the same energy. This mode preserves those original eigenvectors.
+the same energy. With `basis = "raw"` this mode preserves those original
+eigenvectors; `basis = "symmetry"` chooses one basis, as described below.
 
 The finite cube and Cartesian discretization do not preserve exact continuum
 rotational symmetry. Angular diagnostics, especially L2 spread near a hard
@@ -82,15 +85,55 @@ insufficient to certify a pure l=2 state. Enlarge the domain and refine the grid
 separately before drawing physical conclusions. The default is an executable
 demonstration, not an accuracy threshold.
 
-This implementation does not silently assign n/l/m or rotate nearly degenerate
-vectors into textbook shapes. Such a rotation would require additional choices
-and checking its residual against the finite-grid Hamiltonian.
+This implementation does not assign n/l/m, and it never mixes vectors from
+different energies into textbook shapes.
+
+## Optional basis choice after the solve
+
+`basis = "symmetry"` runs `schrodinger3d/basis.py` after `eigsh` returns:
+
+1. Test which operations leave the sampled V unchanged: x->-x, y->-y, z->-z,
+   and the x<->y swap. Only those are used, so each commutes with the discrete
+   H. A custom V without them is left alone.
+2. Group states whose energies agree within 1e-8 * max(1, |E|).
+3. Inside each group, diagonalize the restricted operations one after another.
+
+Vectors are recombined only inside one group, so every result is still an
+eigenvector of the same H, with the same energy. The default run reports
+residuals near 1e-14. Nearly degenerate groups, such as the cubic t2g and eg
+3d levels, are never mixed. The x<->y swap makes z the special axis, the same
+convention as textbook real orbitals.
+
+For the default n=64, L=40 hydrogen run the measured signs are:
+
+| States | Rx, Ry, Rz | Pxy | Looks like |
+| --- | --- | --- | --- |
+| 1-3 | (-,+,+), (+,-,+), (+,+,-) | | p_x, p_y, p_z |
+| 5-7 | (-,-,+), (-,+,-), (+,-,-) | | d_xy, d_xz, d_yz |
+| 8-9 | (+,+,+) | -1, +1 | d_x2-y2, d_z2 |
+
+The last column is read from the measured signs and <L2>; it is not an input.
+A test compares the resulting d_z2 with the named-orbital mode on the same grid
+only as an independent check; their overlap is 1 to eight decimal places.
+
+Why reflections rather than L2 and Lz: on a cubic grid they commute with H only
+approximately. Inside each exactly degenerate group L2 is constant, and Lz
+cannot separate the eg pair because its restricted matrix is zero. Building
+m=+/-2 states would mix the t2g and eg groups, which have different energies
+on the grid; on a 40^3 test grid the residual then rose to about 1e-4. The
+reflections and the swap commute with the discrete H exactly. L2 and Lz remain
+measurements of the result.
+
+If the requested state count cuts a group, its span is not closed under the
+operations. That group is left unrotated and a note is printed; increase
+`states` to complete it.
 
 ## Outputs and comparison
 
-- `outputs/plots/`: cuts and optional 3D isosurface of the selected raw state.
+- `outputs/plots/`: cuts and optional 3D isosurface of the selected state.
+  The symmetry basis adds `_symbasis` to the file name.
 - `outputs/checks/*_analysis.json`: all energies, residuals, probability checks,
-  angular moments/spreads, and flags confirming full-grid unrotated solving.
+  angular moments/spreads, symmetry eigenvalues, and basis-choice flags.
 - `plot.cmd`: general full-grid mode, usually without angular reports.
 - `hydrogen.cmd`: the older named-orbital mode with `method="symmetry"`.
 

@@ -17,5 +17,9 @@ surface = true
 output = ""
 
 [analysis]
-# Measurements are made after eigsh returns; eigenvectors are not modified.
+# Measurements are made after eigsh returns; they do not modify eigenvectors.
 angular_momentum = true
+# "raw" keeps the eigensolver's vectors. "symmetry" recombines vectors only
+# inside each degenerate level, using reflections and the x<->y swap that
+# leave V unchanged. No orbital labels or templates are used.
+basis = "symmetry"

@@ -82,6 +82,10 @@ def draw_energy_levels(ax, energies, kind, length, state, orbital_info=None, ana
         annotation += (f"\n<L2>: {analysis_row['L2_mean']:.3f}; std: {analysis_row['L2_std']:.3f}"
                        f"\nl_eff: {analysis_row['l_effective']:.3f} (diagnostic only)"
                        f"\n<Lz>: {analysis_row['Lz_mean']:.3f}; std: {analysis_row['Lz_std']:.3f}")
+    if analysis_row and "symmetry_expectations" in analysis_row:
+        parts = [f"{name} {value:+.0f}" if abs(abs(value) - 1) < 1e-6 else f"{name} {value:+.2f}"
+                 for name, value in analysis_row["symmetry_expectations"].items()]
+        annotation += "\nSymmetry eigenvalues: " + ", ".join(parts)
     # Put the annotation inside the largest energy gap, away from the levels.
     all_levels = np.sort(np.r_[energies, reference]) if reference is not None else energies
     if len(energies) > 1:
@@ -192,6 +196,9 @@ def plot_summary(coordinates, spacing, length, energies, wavefunctions, kind, ou
     )
     if analysis_row:
         reference_note = "Full-grid Hamiltonian eigenstate; no orbital constraints or basis rotation."
+        if "symmetry_expectations" in analysis_row:
+            reference_note = ("Full-grid Hamiltonian eigenstate; basis chosen after the solve, inside "
+                              "its degenerate level, by the potential's reflections and x<->y swap.")
     fig.supxlabel(
         f"hbar = mass = 1 | interior grid {n} x {n} x {n} | "
         f"L = {length:g} | h = {spacing:.4f} | zero boundary at the cube faces\n"
@@ -214,7 +221,7 @@ def read_settings(path):
                        "method": str},
         "plot": {"state": int, "quantity": str, "output": str, "zoom": str,
                  "density_scale": str, "surface": bool, "hydrogen_orbital": str},
-        "analysis": {"angular_momentum": bool},
+        "analysis": {"angular_momentum": bool, "basis": str},
     }
     defaults = {}
     for section, values in settings.items():
@@ -239,6 +246,8 @@ def read_settings(path):
         raise ValueError('plot.zoom must be "auto" or "full".')
     if defaults.get("density_scale", "linear") not in ("linear", "log"):
         raise ValueError('plot.density_scale must be "linear" or "log".')
+    if defaults.get("basis", "raw") not in ("raw", "symmetry"):
+        raise ValueError('analysis.basis must be "raw" or "symmetry".')
     if defaults.get("hydrogen_orbital", ""):
         from .hydrogen import ORBITALS
         if defaults["hydrogen_orbital"] not in ORBITALS:
@@ -266,6 +275,8 @@ def parse_arguments(argv=None):
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--hydrogen-orbital", default="", help="Named symmetry mode only")
     parser.add_argument("--angular-momentum", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--basis", choices=["raw", "symmetry"], default="raw",
+                        help="Full mode: recombine degenerate vectors after the solve")
     parser.add_argument("--zoom", choices=["auto", "full"], default="auto")
     parser.add_argument("--density-scale", choices=["linear", "log"], default="linear")
     parser.add_argument("--surface", action=argparse.BooleanOptionalAction, default=False)
@@ -285,6 +296,8 @@ def parse_arguments(argv=None):
             parser.error("Symmetry mode requires hydrogen and a supported hydrogen_orbital label.")
         if args.angular_momentum:
             parser.error("Post-solve angular reports are enabled for full mode.")
+        if args.basis != "raw":
+            parser.error('analysis.basis applies to full mode; leave it "raw" in symmetry mode.')
     if args.hydrogen_orbital and args.potential != "hydrogen":
         parser.error("hydrogen_orbital requires potential = 'hydrogen'.")
     if args.potential == "hydrogen" and args.n % 2:
@@ -322,7 +335,8 @@ def main():
         args.state = 0
     else:
         coordinates, spacing, energies, wavefunctions, full_report = solve_full_grid(
-            args.n, args.length, args.potential, number_of_states, args.angular_momentum)
+            args.n, args.length, args.potential, number_of_states, args.angular_momentum,
+            args.basis)
     filename = (
         f"{args.potential}_overview.png"
         if args.state == 0 and args.quantity == "density" else
@@ -330,8 +344,9 @@ def main():
     )
     if orbital_info:
         filename = f"hydrogen_{args.hydrogen_orbital}_{args.quantity}.png"
-    elif args.angular_momentum:
-        filename = f"{args.potential}_full_state_{args.state}_{args.quantity}.png"
+    elif args.angular_momentum or args.basis == "symmetry":
+        suffix = "_symbasis" if args.basis == "symmetry" else ""
+        filename = f"{args.potential}_full_state_{args.state}_{args.quantity}{suffix}.png"
     output = args.output or PROJECT_ROOT / "outputs" / "plots" / filename
     if not output.is_absolute():
         output = PROJECT_ROOT / output
@@ -357,7 +372,8 @@ def main():
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(full_report, indent=2), encoding="utf-8")
         print("Method:", full_report["method"])
-        print(f"Unknowns: {full_report['unknowns']}; symmetry reduction: False; basis rotation: False")
+        print(f"Unknowns: {full_report['unknowns']}; symmetry reduction: False; "
+              f"basis rotation: {full_report['basis_rotation']}")
         print("State      Energy       <L2>     L2 std    l_eff     <Lz>     Lz std")
         for row in full_report["states"]:
             print(f"{row['state']:5d} {row['energy']:12.7f} {row['L2_mean']:9.4f} "
@@ -365,6 +381,16 @@ def main():
                   f"{row['Lz_mean']:9.4f} {row['Lz_std']:9.4f}")
         print(f"Post-solve report: {report_path}")
         print("Angular moments are diagnostics, not guaranteed n/l/m labels.")
+    if full_report and full_report["basis_rotation"]:
+        print(f"Basis: chosen after the solve with {', '.join(full_report['symmetries_used']) or 'no'}"
+              " symmetries of V, within each degenerate level")
+        for row in full_report["states"]:
+            signs = " ".join(f"{name}={value:+.2f}"
+                             for name, value in row["symmetry_expectations"].items())
+            print(f"{row['state']:5d} {row['energy']:12.7f}  {signs}  "
+                  f"residual {row['relative_residual']:.1e}")
+        for note in full_report["basis_notes"]:
+            print("NOTE:", note)
     if not orbital_info and args.potential == "hydrogen" and energies[args.state] >= 0:
         print("WARNING: selected E>=0 is not a free-atom bound orbital. Increase the box.")
     print(f"Saved: {output.resolve()}")

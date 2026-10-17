@@ -1,18 +1,27 @@
 """Solve the full Cartesian Hamiltonian, then optionally measure the results.
 
-This module does not import hydrogen.py, request n/l/m, select a reflection
-sector, or rotate an eigenspace. Its inputs are the grid, potential, and count.
+This module does not import hydrogen.py, request n/l/m, or select a reflection
+sector. Its inputs are the grid, potential, and count. With basis="symmetry",
+basis.py recombines vectors inside each degenerate level after the solve.
 """
 
 import numpy as np
 
 from .angular import angular_diagnostics
+from .basis import potential_symmetries, symmetry_adapted_states, symmetry_expectations
 from .potentials import make_potential
 from .solver import make_grid, build_hamiltonian, solve_lowest_states
 
 
-def solve_full_grid(n, length, potential_name, number_of_states, measure_angular=False):
-    """Return coordinates, spacing, original eigenpairs, and post-solve diagnostics."""
+def solve_full_grid(n, length, potential_name, number_of_states, measure_angular=False,
+                    basis="raw"):
+    """Return coordinates, spacing, eigenpairs, and post-solve diagnostics.
+
+    basis="raw" keeps the eigensolver's vectors. basis="symmetry" recombines
+    them within each degenerate level using the potential's own symmetries.
+    """
+    if basis not in ("raw", "symmetry"):
+        raise ValueError('basis must be "raw" or "symmetry".')
     if potential_name == "hydrogen" and n % 2:
         n += 1
     coordinates, spacing = make_grid(n, length)
@@ -21,6 +30,12 @@ def solve_full_grid(n, length, potential_name, number_of_states, measure_angular
 
     # No orbital/symmetry information enters this eigensolve.
     energies, states = solve_lowest_states(H, number_of_states, spacing)
+
+    symmetries, basis_notes = [], []
+    if basis == "symmetry":
+        symmetries = potential_symmetries(potential)
+        states, basis_notes = symmetry_adapted_states(states, potential.shape, energies,
+                                                      symmetries)
 
     rows = []
     shell = max(1, n // 10)
@@ -36,12 +51,19 @@ def solve_full_grid(n, length, potential_name, number_of_states, measure_angular
         }
         if measure_angular:
             row.update(angular_diagnostics(psi, coordinates, spacing))
+        if symmetries:
+            row["symmetry_expectations"] = symmetry_expectations(psi, symmetries)
         rows.append(row)
+    method = "Full Cartesian Hamiltonian eigensolve; post-solve measurements only"
+    if basis == "symmetry":
+        method = ("Full Cartesian Hamiltonian eigensolve; post-solve basis choice within "
+                  "degenerate levels using the potential's symmetries")
     report = {
-        "method": "Full Cartesian Hamiltonian eigensolve; post-solve measurements only",
+        "method": method,
         "potential": potential_name, "grid_points_per_axis": n,
         "length": length, "spacing": spacing, "unknowns": H.shape[0],
-        "symmetry_reduction": False, "basis_rotation": False,
+        "symmetry_reduction": False, "basis_rotation": basis == "symmetry",
+        "basis": basis, "symmetries_used": symmetries, "basis_notes": basis_notes,
         "orbital_label_input": None, "angular_momentum_measured": measure_angular,
         "angular_discretization": "Centered first differences with zero exterior; boundary-sensitive",
         "states": rows,

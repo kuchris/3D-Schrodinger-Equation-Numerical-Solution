@@ -16,7 +16,7 @@ selection; analytical wavefunctions are not used to generate the plots.
 | What you want to change | File |
 | --- | --- |
 | Potential name, grid, generic energy index, plot style | `config/settings.toml` |
-| Full-grid solve followed by angular measurements | `config/direct.toml` |
+| Full-grid solve, angular measurements, post-solve basis | `config/direct.toml` |
 | Hydrogen orbital label such as `2p_z` or `3d_z2` | `config/hydrogen.toml` |
 | Your own function `V(x, y, z)` | `custom/potential.py` |
 
@@ -62,6 +62,7 @@ and what the figure colors and surfaces mean.
 | `schrodinger3d/potentials.py` | Named potential formulas and preset selection |
 | `schrodinger3d/solver.py` | Grid, Hamiltonian, lowest eigenstates |
 | `schrodinger3d/direct.py` | Full-grid solve and post-solve report |
+| `schrodinger3d/basis.py` | Optional basis choice inside degenerate levels |
 | `schrodinger3d/angular.py` | Cartesian angular momentum measurements only |
 | `schrodinger3d/hydrogen.py` | Numerical s/p/d symmetry selection |
 | `schrodinger3d/plotting.py` | Settings, CLI, central cuts, energy plots |
@@ -104,6 +105,10 @@ The six cube faces still impose zero wavefunction. Do not multiply V by h square
 To solve from H without an orbital table, use `direct.cmd`. The full matrix is
 solved first; angular moments are measured afterwards without changing the
 eigenvectors. No reflection rules or orbital templates enter that solve.
+With `basis = "symmetry"` (the `direct.toml` default), vectors inside each
+degenerate energy level are then recombined using the reflections and x<->y
+swap that leave V unchanged. This gives real p- and d-like shapes without an
+orbital table, and every result is still an eigenvector of the same H.
 See [full-Hamiltonian method and limitations](docs/direct-hamiltonian.md).
 
 In generic mode, `state = 4` selects the fifth energy-sorted state, counting
