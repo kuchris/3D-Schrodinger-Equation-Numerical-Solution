@@ -8,7 +8,7 @@ when running its modules from the project root.
 | --- | --- |
 | `config/` | General and named-hydrogen TOML settings |
 | `custom/` | The editable potential function |
-| `schrodinger3d/` | Potential formulas, solver, hydrogen symmetry, and display |
+| `schrodinger3d/` | Full solver, optional symmetry mode, post-solve angular measurements, and display |
 | `examples/` | A short complete numerical calculation |
 | `tests/` | Physical and display regression checks |
 | `docs/` | Numerical method, paper sources, limits, and screenshots |

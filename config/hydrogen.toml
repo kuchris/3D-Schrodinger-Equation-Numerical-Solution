@@ -1,6 +1,8 @@
 # Numerical hydrogen orbitals, using the same finite-difference Hamiltonian.
+# This mode uses known symmetries. For unconstrained solving use config/direct.toml.
 # Run hydrogen.cmd in the project root. Edit hydrogen_orbital to choose the shape.
 [simulation]
+method = "symmetry"
 potential = "hydrogen"
 n = 100
 length = 50.0

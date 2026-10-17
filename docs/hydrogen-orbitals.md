@@ -1,5 +1,9 @@
 # Numerical hydrogen orbitals and readable plots
 
+This guide describes the symmetry-aided mode, `method="symmetry"`. For solving
+from the full Hamiltonian without the orbital rules, use `direct.cmd` and
+[the full-grid guide](direct-hamiltonian.md).
+
 Run `setup.cmd` to install the plotting dependency, then double-click
 `hydrogen.cmd`. Edit `config/hydrogen.toml` to select a named orbital.
 The default is `3d_z2`, using n=100 interior points and a cube of side 50.

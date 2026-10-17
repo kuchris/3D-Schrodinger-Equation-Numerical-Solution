@@ -1,0 +1,21 @@
+# Solve the whole Hamiltonian first. No orbital labels or reflection sectors.
+[simulation]
+method = "full"
+potential = "hydrogen"
+n = 64
+length = 40.0
+states = 14
+
+[plot]
+# An energy-sorted index, NOT a principal/angular quantum number.
+state = 9
+hydrogen_orbital = ""
+quantity = "wavefunction"
+zoom = "auto"
+density_scale = "log"
+surface = true
+output = ""
+
+[analysis]
+# Measurements are made after eigsh returns; eigenvectors are not modified.
+angular_momentum = true

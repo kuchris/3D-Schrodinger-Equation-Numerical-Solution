@@ -56,6 +56,10 @@ principal quantum number of four, or specify a p/d orbital orientation.
 
 ## 4. Optional hydrogen symmetry selection
 
+This is `method="symmetry"`. For `method="full"`, the entire Cartesian matrix is
+solved without this step. Optional [post-solve angular measurements](direct-hamiltonian.md)
+do not alter those full-grid eigenvectors.
+
 This step is only used for the named hydrogen mode. It still solves the same
 Cartesian finite-difference Hamiltonian. It does not insert an analytical R(r)
 or spherical harmonic into the plotted wavefunction.

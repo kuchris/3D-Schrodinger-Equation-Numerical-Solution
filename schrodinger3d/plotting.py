@@ -6,6 +6,7 @@ Command-line options override the settings file.
 """
 
 import argparse
+import json
 from pathlib import Path
 
 try:
@@ -21,14 +22,8 @@ from matplotlib.colors import LogNorm
 import numpy as np
 
 from .potentials import POTENTIAL_LABELS, make_potential
-from .hydrogen import ORBITALS, solve_hydrogen_orbital
+from .direct import solve_full_grid
 from .display import central_wavefunction_slices, probability_view_limit, plot_isosurfaces
-from .solver import (
-    build_hamiltonian,
-    make_grid,
-    solve_lowest_states,
-)
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -52,7 +47,7 @@ def reference_energies(kind, length, count):
     return np.sort(energies.ravel())[:count]
 
 
-def draw_energy_levels(ax, energies, kind, length, state, orbital_info=None):
+def draw_energy_levels(ax, energies, kind, length, state, orbital_info=None, analysis_row=None):
     """Draw computed energies, an optional reference, and the selected state."""
     index = np.arange(len(energies))
     reference = reference_energies(kind, length, len(energies))
@@ -83,6 +78,10 @@ def draw_energy_levels(ax, energies, kind, length, state, orbital_info=None):
         annotation += "\nAnalytical reference: not supplied"
     if kind == "hydrogen" and energies[state] >= 0:
         annotation += "\nE >= 0: not a free-atom bound orbital"
+    if analysis_row and "L2_mean" in analysis_row:
+        annotation += (f"\n<L2>: {analysis_row['L2_mean']:.3f}; std: {analysis_row['L2_std']:.3f}"
+                       f"\nl_eff: {analysis_row['l_effective']:.3f} (diagnostic only)"
+                       f"\n<Lz>: {analysis_row['Lz_mean']:.3f}; std: {analysis_row['Lz_std']:.3f}")
     # Put the annotation inside the largest energy gap, away from the levels.
     all_levels = np.sort(np.r_[energies, reference]) if reference is not None else energies
     if len(energies) > 1:
@@ -101,7 +100,7 @@ def draw_energy_levels(ax, energies, kind, length, state, orbital_info=None):
 
 def plot_summary(coordinates, spacing, length, energies, wavefunctions, kind, output,
                  state=0, quantity="density", zoom="full", density_scale="linear",
-                 orbital_info=None):
+                 orbital_info=None, analysis_row=None):
     """Use one color scale for all three cuts of the selected state."""
     n = len(coordinates)
     psi = wavefunctions[:, state].reshape((n, n, n), order="C").copy()
@@ -171,7 +170,7 @@ def plot_summary(coordinates, spacing, length, energies, wavefunctions, kind, ou
     fig.colorbar(contour, ax=density_axes, shrink=0.75, label=color_label, **colorbar_options)
 
     energy_axis = fig.add_subplot(grid[1, 1])
-    draw_energy_levels(energy_axis, energies, kind, length, state, orbital_info)
+    draw_energy_levels(energy_axis, energies, kind, length, state, orbital_info, analysis_row)
 
     name = POTENTIAL_LABELS[kind]
     title = "Probability density" if quantity == "density" else "Signed wavefunction"
@@ -191,6 +190,8 @@ def plot_summary(coordinates, spacing, length, energies, wavefunctions, kind, ou
             kind, "Paper formula in model units; no analytical reference supplied."
          )
     )
+    if analysis_row:
+        reference_note = "Full-grid Hamiltonian eigenstate; no orbital constraints or basis rotation."
     fig.supxlabel(
         f"hbar = mass = 1 | interior grid {n} x {n} x {n} | "
         f"L = {length:g} | h = {spacing:.4f} | zero boundary at the cube faces\n"
@@ -209,9 +210,11 @@ def read_settings(path):
         settings = tomllib.load(file)
 
     fields = {
-        "simulation": {"potential": str, "n": int, "length": (int, float), "states": int},
+        "simulation": {"potential": str, "n": int, "length": (int, float), "states": int,
+                       "method": str},
         "plot": {"state": int, "quantity": str, "output": str, "zoom": str,
                  "density_scale": str, "surface": bool, "hydrogen_orbital": str},
+        "analysis": {"angular_momentum": bool},
     }
     defaults = {}
     for section, values in settings.items():
@@ -228,14 +231,18 @@ def read_settings(path):
 
     if defaults.get("potential", "harmonic") not in POTENTIAL_LABELS:
         raise ValueError(f"simulation.potential must be one of: {', '.join(POTENTIAL_LABELS)}")
+    if defaults.get("method", "full") not in ("full", "symmetry"):
+        raise ValueError('simulation.method must be "full" or "symmetry".')
     if defaults.get("quantity", "density") not in ("density", "wavefunction"):
         raise ValueError('plot.quantity must be "density" or "wavefunction".')
     if defaults.get("zoom", "auto") not in ("auto", "full"):
         raise ValueError('plot.zoom must be "auto" or "full".')
     if defaults.get("density_scale", "linear") not in ("linear", "log"):
         raise ValueError('plot.density_scale must be "linear" or "log".')
-    if defaults.get("hydrogen_orbital", "") not in ("", *ORBITALS):
-        raise ValueError(f"Unknown hydrogen_orbital; choose from {', '.join(ORBITALS)}")
+    if defaults.get("hydrogen_orbital", ""):
+        from .hydrogen import ORBITALS
+        if defaults["hydrogen_orbital"] not in ORBITALS:
+            raise ValueError(f"Unknown hydrogen_orbital; choose from {', '.join(ORBITALS)}")
     if "output" in defaults:
         defaults["output"] = Path(defaults["output"]) if defaults["output"] else None
     return defaults
@@ -249,6 +256,7 @@ def parse_arguments(argv=None):
     config_args, _ = config_parser.parse_known_args(argv)
     parser = argparse.ArgumentParser(description=__doc__, parents=[config_parser])
     parser.add_argument("--potential", choices=list(POTENTIAL_LABELS), default="harmonic")
+    parser.add_argument("--method", choices=["full", "symmetry"], default="full")
     parser.add_argument("--n", type=int, default=25, help="Odd n gives an exact central cut")
     parser.add_argument("--length", type=float, default=8)
     parser.add_argument("--states", type=int, default=10)
@@ -256,7 +264,8 @@ def parse_arguments(argv=None):
                         help="Energy-sorted state index: 0 is the ground state")
     parser.add_argument("--quantity", choices=["density", "wavefunction"], default="density")
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--hydrogen-orbital", choices=["", *ORBITALS], default="")
+    parser.add_argument("--hydrogen-orbital", default="", help="Named symmetry mode only")
+    parser.add_argument("--angular-momentum", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--zoom", choices=["auto", "full"], default="auto")
     parser.add_argument("--density-scale", choices=["linear", "log"], default="linear")
     parser.add_argument("--surface", action=argparse.BooleanOptionalAction, default=False)
@@ -268,6 +277,14 @@ def parse_arguments(argv=None):
     args = parser.parse_args(argv)
     if args.n < 2:
         parser.error("--n / simulation.n must be at least 2.")
+    if args.method == "full" and args.hydrogen_orbital:
+        parser.error("Full mode takes an energy index, not hydrogen_orbital; leave that label empty.")
+    if args.method == "symmetry":
+        from .hydrogen import ORBITALS
+        if args.potential != "hydrogen" or args.hydrogen_orbital not in ORBITALS:
+            parser.error("Symmetry mode requires hydrogen and a supported hydrogen_orbital label.")
+        if args.angular_momentum:
+            parser.error("Post-solve angular reports are enabled for full mode.")
     if args.hydrogen_orbital and args.potential != "hydrogen":
         parser.error("hydrogen_orbital requires potential = 'hydrogen'.")
     if args.potential == "hydrogen" and args.n % 2:
@@ -292,20 +309,20 @@ def main():
     selection_description = (f"orbital: {args.hydrogen_orbital}" if args.hydrogen_orbital
                              else f"state: {args.state}")
     print(f"Potential: {args.potential}; grid: {args.n}^3; "
-          f"{selection_description}; plot: {args.quantity}")
+          f"{selection_description}; method: {args.method}; plot: {args.quantity}")
 
     orbital_info = None
-    if args.hydrogen_orbital:
+    full_report = None
+    if args.method == "symmetry":
+        from .hydrogen import solve_hydrogen_orbital
         coordinates, spacing, energy, psi, orbital_info = solve_hydrogen_orbital(
             args.n, args.length, args.hydrogen_orbital)
         energies = np.array([energy])
         wavefunctions = psi.reshape(-1, 1)
         args.state = 0
     else:
-        coordinates, spacing = make_grid(args.n, args.length)
-        potential = make_potential(coordinates, args.potential, length=args.length)
-        hamiltonian = build_hamiltonian(potential, spacing)
-        energies, wavefunctions = solve_lowest_states(hamiltonian, number_of_states, spacing)
+        coordinates, spacing, energies, wavefunctions, full_report = solve_full_grid(
+            args.n, args.length, args.potential, number_of_states, args.angular_momentum)
     filename = (
         f"{args.potential}_overview.png"
         if args.state == 0 and args.quantity == "density" else
@@ -313,12 +330,16 @@ def main():
     )
     if orbital_info:
         filename = f"hydrogen_{args.hydrogen_orbital}_{args.quantity}.png"
+    elif args.angular_momentum:
+        filename = f"{args.potential}_full_state_{args.state}_{args.quantity}.png"
     output = args.output or PROJECT_ROOT / "outputs" / "plots" / filename
     if not output.is_absolute():
         output = PROJECT_ROOT / output
+    analysis_row = full_report["states"][args.state] if full_report else None
     plot_summary(coordinates, spacing, args.length, energies, wavefunctions,
                  args.potential, output, state=args.state, quantity=args.quantity,
-                 zoom=args.zoom, density_scale=args.density_scale, orbital_info=orbital_info)
+                 zoom=args.zoom, density_scale=args.density_scale, orbital_info=orbital_info,
+                 analysis_row=analysis_row)
     if args.surface:
         psi = wavefunctions[:, args.state].reshape((len(coordinates),) * 3)
         surface_output = output.with_name(output.stem + "_3d.png")
@@ -331,7 +352,20 @@ def main():
               f"relative difference: {orbital_info['relative_energy_error']:.3%}")
         print(f"Eigenpair residual: {orbital_info['relative_residual']:.3e}; "
               f"outer-shell probability: {orbital_info['outer_shell_probability']:.3%}")
-    elif args.potential == "hydrogen" and energies[args.state] >= 0:
+    if full_report and args.angular_momentum:
+        report_path = PROJECT_ROOT / "outputs" / "checks" / (output.stem + "_analysis.json")
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(full_report, indent=2), encoding="utf-8")
+        print("Method:", full_report["method"])
+        print(f"Unknowns: {full_report['unknowns']}; symmetry reduction: False; basis rotation: False")
+        print("State      Energy       <L2>     L2 std    l_eff     <Lz>     Lz std")
+        for row in full_report["states"]:
+            print(f"{row['state']:5d} {row['energy']:12.7f} {row['L2_mean']:9.4f} "
+                  f"{row['L2_std']:9.4f} {row['l_effective']:8.4f} "
+                  f"{row['Lz_mean']:9.4f} {row['Lz_std']:9.4f}")
+        print(f"Post-solve report: {report_path}")
+        print("Angular moments are diagnostics, not guaranteed n/l/m labels.")
+    if not orbital_info and args.potential == "hydrogen" and energies[args.state] >= 0:
         print("WARNING: selected E>=0 is not a free-atom bound orbital. Increase the box.")
     print(f"Saved: {output.resolve()}")
     selected_name = args.hydrogen_orbital or f"State {args.state}"

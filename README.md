@@ -9,16 +9,18 @@ selection; analytical wavefunctions are not used to generate the plots.
 
 1. Double-click `setup.cmd` to install or update dependencies (Python 3.10+).
 2. For general potentials, edit `config/settings.toml` and run `plot.cmd`.
-3. For named hydrogen orbitals, edit `config/hydrogen.toml` and run `hydrogen.cmd`.
-4. New images appear in `outputs/plots/`.
+3. For an unconstrained full-Hamiltonian example, edit `config/direct.toml` and run `direct.cmd`.
+4. For symmetry-selected named hydrogen orbitals, edit `config/hydrogen.toml` and run `hydrogen.cmd`.
+5. New images appear in `outputs/plots/`.
 
 | What you want to change | File |
 | --- | --- |
 | Potential name, grid, generic energy index, plot style | `config/settings.toml` |
+| Full-grid solve followed by angular measurements | `config/direct.toml` |
 | Hydrogen orbital label such as `2p_z` or `3d_z2` | `config/hydrogen.toml` |
 | Your own function `V(x, y, z)` | `custom/potential.py` |
 
-Both launchers work when double-clicked; no command-line arguments are needed.
+The plot launchers work when double-clicked; no command-line arguments are needed.
 Relative custom output paths are resolved from the project root. An empty
 `output` chooses an automatic filename in `outputs/plots/`.
 
@@ -26,7 +28,7 @@ Relative custom output paths are resolved from the project root. An empty
 
 ```text
 .
-├── plot.cmd / hydrogen.cmd / setup.cmd   # Windows launchers
+├── plot.cmd / direct.cmd / hydrogen.cmd / setup.cmd  # Windows launchers
 ├── config/                              # Settings you edit
 ├── custom/potential.py                  # Your potential function
 ├── schrodinger3d/                       # Solver and plotting code
@@ -59,6 +61,8 @@ and what the figure colors and surfaces mean.
 | --- | --- |
 | `schrodinger3d/potentials.py` | Named potential formulas and preset selection |
 | `schrodinger3d/solver.py` | Grid, Hamiltonian, lowest eigenstates |
+| `schrodinger3d/direct.py` | Full-grid solve and post-solve report |
+| `schrodinger3d/angular.py` | Cartesian angular momentum measurements only |
 | `schrodinger3d/hydrogen.py` | Numerical s/p/d symmetry selection |
 | `schrodinger3d/plotting.py` | Settings, CLI, central cuts, energy plots |
 | `schrodinger3d/display.py` | Auto framing, central interpolation, 3D isosurfaces |
@@ -97,11 +101,16 @@ The six cube faces still impose zero wavefunction. Do not multiply V by h square
 
 ## Higher states and hydrogen
 
+To solve from H without an orbital table, use `direct.cmd`. The full matrix is
+solved first; angular moments are measured afterwards without changing the
+eigenvectors. No reflection rules or orbital templates enter that solve.
+See [full-Hamiltonian method and limitations](docs/direct-hamiltonian.md).
+
 In generic mode, `state = 4` selects the fifth energy-sorted state, counting
 degeneracies. It is not a principal quantum number or an `(n,l,m)` label.
 `states = 10` means compute at least ten states, not select state ten.
 
-The named hydrogen mode in `config/hydrogen.toml` selects a numerical symmetry
+The optional named mode uses `method = "symmetry"`. The mode in `config/hydrogen.toml` selects a numerical symmetry
 sector with `hydrogen_orbital = "3d_z2"`. Other labels include `2p_z`, `3d_xy`,
 and the low s/p/d states listed in the [hydrogen guide](docs/hydrogen-orbitals.md).
 It overrides the generic energy-index choice.
