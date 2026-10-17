@@ -4,7 +4,7 @@ Model units: hbar = mass = 1.
 Equation: H psi = E psi, with H = -0.5 * Laplacian + V.
 Boundary condition: psi = 0 on the six faces of the cube.
 Potential formulas live in potentials.py. For a short complete usage example,
-start with example.py.
+start with examples/basic_usage.py.
 """
 
 import argparse
@@ -14,7 +14,7 @@ from scipy import sparse
 from scipy.sparse.linalg import eigsh
 
 # Re-export these names so existing scripts keep working after the module split.
-from potentials import POTENTIAL_LABELS, make_potential
+from .potentials import POTENTIAL_LABELS, make_potential
 
 
 def make_grid(n, length):

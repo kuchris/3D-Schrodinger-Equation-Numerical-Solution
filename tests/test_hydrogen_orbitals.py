@@ -3,10 +3,10 @@
 import unittest
 import numpy as np
 
-from hydrogen_orbitals import solve_hydrogen_orbital
-from potentials import make_potential
-from schrodinger_3d import build_hamiltonian
-from orbital_display import central_wavefunction_slices, probability_view_limit
+from schrodinger3d.hydrogen import solve_hydrogen_orbital
+from schrodinger3d.potentials import make_potential
+from schrodinger3d.solver import build_hamiltonian
+from schrodinger3d.display import central_wavefunction_slices, probability_view_limit
 
 
 class HydrogenOrbitalChecks(unittest.TestCase):

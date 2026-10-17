@@ -11,8 +11,8 @@ from itertools import permutations
 import numpy as np
 from scipy import sparse
 
-from potentials import hydrogen_potential
-from schrodinger_3d import make_grid, build_hamiltonian, solve_lowest_states
+from .potentials import hydrogen_potential
+from .solver import make_grid, build_hamiltonian, solve_lowest_states
 
 
 # label: (principal quantum number, reflection parity along x/y/z, selector, rank)

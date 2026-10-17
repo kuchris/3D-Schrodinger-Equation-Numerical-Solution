@@ -2,4 +2,4 @@
 /.audit-venv/
 __pycache__/
 *.py[cod]
-/plots/
+/outputs/

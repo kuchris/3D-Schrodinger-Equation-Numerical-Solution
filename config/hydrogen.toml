@@ -1,5 +1,5 @@
 # Numerical hydrogen orbitals, using the same finite-difference Hamiltonian.
-# Run hydrogen.cmd. Edit hydrogen_orbital below to choose the shape.
+# Run hydrogen.cmd in the project root. Edit hydrogen_orbital to choose the shape.
 [simulation]
 potential = "hydrogen"
 n = 100

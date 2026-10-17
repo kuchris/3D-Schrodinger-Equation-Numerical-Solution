@@ -106,20 +106,20 @@ def make_potential(coordinates, kind, length=None):
         spacing = length / (len(coordinates) + 1)
         return hydrogen_potential(x, y, z, origin_tolerance=spacing * 1e-10)
     if kind == "custom":
-        from custom_potential import V
+        from custom.potential import V
 
         values = np.asarray(V(x, y, z))
         if np.iscomplexobj(values):
-            raise ValueError("custom_potential.V must return real values.")
+            raise ValueError("custom.potential.V must return real values.")
         try:
             values = np.broadcast_to(values, x.shape).astype(float, copy=True)
         except (TypeError, ValueError) as error:
             raise ValueError(
-                "custom_potential.V must return numeric values broadcastable "
+                "custom.potential.V must return numeric values broadcastable "
                 f"to the grid shape {x.shape}; got shape {values.shape}."
             ) from error
         if not np.all(np.isfinite(values)):
-            raise ValueError("custom_potential.V contains NaN or infinity.")
+            raise ValueError("custom.potential.V contains NaN or infinity.")
         return values
 
     raise ValueError(f"Unknown potential: {kind}")

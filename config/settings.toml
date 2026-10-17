@@ -1,7 +1,7 @@
-# Edit and save this file, then double-click plot.cmd to generate a plot.
+# Edit and save this file, then double-click plot.cmd in the project root.
 
 [simulation]
-# "custom" = your function in custom_potential.py
+# "custom" = your function in custom/potential.py
 # Paper presets: "box", "paper_harmonic", "circular", "torus", "tanh", "hydrogen"
 # "harmonic" is the separate omega=1 analytical benchmark.
 potential = "custom"
@@ -32,6 +32,6 @@ surface = false
 # Optional for hydrogen: "2p_z", "3d_xy", "3d_z2", etc. Empty uses state index.
 hydrogen_orbital = ""
 
-# Leave empty to save an automatically named image in the plots folder.
-# Paths are relative to this settings file, e.g. "plots/my_state.png".
+# Leave empty to save an automatically named image in outputs/plots.
+# Paths are relative to the project root, e.g. "outputs/plots/my_state.png".
 output = ""

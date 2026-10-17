@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import numpy as np
 
-from potentials import POTENTIAL_LABELS, make_potential
-from schrodinger_3d import (
+from schrodinger3d.potentials import POTENTIAL_LABELS, make_potential
+from schrodinger3d.solver import (
     build_hamiltonian,
     make_grid,
     solve_lowest_states,
@@ -84,7 +84,7 @@ class PhysicsChecks(unittest.TestCase):
             make_potential(x, "hydrogen", length=8)
 
     def test_paper_options_reach_plotter_without_false_reference(self):
-        from plot_states import parse_arguments, reference_energies
+        from schrodinger3d.plotting import parse_arguments, reference_energies
 
         for kind in ("paper_harmonic", "circular", "torus", "tanh", "hydrogen"):
             with self.subTest(potential=kind):
@@ -96,7 +96,7 @@ class PhysicsChecks(unittest.TestCase):
     def test_custom_harmonic_matches_builtin_spectrum(self):
         x, spacing = make_grid(8, 8)
         # Keep this test valid after the user edits their own function.
-        with patch("custom_potential.V", side_effect=lambda X, Y, Z: 0.5 * (X**2 + Y**2 + Z**2)):
+        with patch("custom.potential.V", side_effect=lambda X, Y, Z: 0.5 * (X**2 + Y**2 + Z**2)):
             custom = make_potential(x, "custom")
         builtin = make_potential(x, "harmonic")
         np.testing.assert_array_equal(custom, builtin)
@@ -106,9 +106,9 @@ class PhysicsChecks(unittest.TestCase):
 
     def test_custom_scalar_and_partial_coordinate_function(self):
         x, _ = make_grid(5, 8)
-        with patch("custom_potential.V", return_value=-2.0):
+        with patch("custom.potential.V", return_value=-2.0):
             np.testing.assert_array_equal(make_potential(x, "custom"), np.full((5, 5, 5), -2.0))
-        with patch("custom_potential.V", side_effect=lambda X, Y, Z: X + 2 * Y + 3 * Z):
+        with patch("custom.potential.V", side_effect=lambda X, Y, Z: X + 2 * Y + 3 * Z):
             actual = make_potential(x, "custom")
         X, Y, Z = np.meshgrid(x, x, x, indexing="ij")
         np.testing.assert_array_equal(actual, X + 2 * Y + 3 * Z)
@@ -117,7 +117,7 @@ class PhysicsChecks(unittest.TestCase):
         x, _ = make_grid(5, 8)
         for value in [1j, np.nan, np.inf, "not a number", np.zeros((2, 3))]:
             with self.subTest(value=str(value)):
-                with patch("custom_potential.V", return_value=value):
+                with patch("custom.potential.V", return_value=value):
                     with self.assertRaises(ValueError):
                         make_potential(x, "custom")
 

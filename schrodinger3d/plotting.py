@@ -1,6 +1,7 @@
 """Plot central slices of a selected eigenstate and the lowest energy levels.
 
-Run without arguments to read settings.toml next to this script.
+From the project root: python -m schrodinger3d.plotting.
+Without arguments, read config/settings.toml.
 Command-line options override the settings file.
 """
 
@@ -19,14 +20,16 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import numpy as np
 
-from potentials import POTENTIAL_LABELS, make_potential
-from hydrogen_orbitals import ORBITALS, solve_hydrogen_orbital
-from orbital_display import central_wavefunction_slices, probability_view_limit, plot_isosurfaces
-from schrodinger_3d import (
+from .potentials import POTENTIAL_LABELS, make_potential
+from .hydrogen import ORBITALS, solve_hydrogen_orbital
+from .display import central_wavefunction_slices, probability_view_limit, plot_isosurfaces
+from .solver import (
     build_hamiltonian,
     make_grid,
     solve_lowest_states,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def reference_energies(kind, length, count):
@@ -242,7 +245,7 @@ def parse_arguments(argv=None):
     # Read --config first, then use its values as defaults for the usual CLI.
     config_parser = argparse.ArgumentParser(add_help=False)
     config_parser.add_argument("--config", type=Path,
-                               default=Path(__file__).with_name("settings.toml"))
+                               default=PROJECT_ROOT / "config" / "settings.toml")
     config_args, _ = config_parser.parse_known_args(argv)
     parser = argparse.ArgumentParser(description=__doc__, parents=[config_parser])
     parser.add_argument("--potential", choices=list(POTENTIAL_LABELS), default="harmonic")
@@ -310,9 +313,9 @@ def main():
     )
     if orbital_info:
         filename = f"hydrogen_{args.hydrogen_orbital}_{args.quantity}.png"
-    output = args.output or Path("plots") / filename
+    output = args.output or PROJECT_ROOT / "outputs" / "plots" / filename
     if not output.is_absolute():
-        output = args.config.resolve().parent / output
+        output = PROJECT_ROOT / output
     plot_summary(coordinates, spacing, args.length, energies, wavefunctions,
                  args.potential, output, state=args.state, quantity=args.quantity,
                  zoom=args.zoom, density_scale=args.density_scale, orbital_info=orbital_info)

@@ -1,9 +1,9 @@
 # Numerical hydrogen orbitals and readable plots
 
 Run `setup.cmd` to install the plotting dependency, then double-click
-`hydrogen.cmd`. Edit `hydrogen_settings.toml` to select a named orbital.
+`hydrogen.cmd`. Edit `config/hydrogen.toml` to select a named orbital.
 The default is `3d_z2`, using n=100 interior points and a cube of side 50.
-It writes both central slices and a separate 3D isosurface PNG in `plots/`.
+It writes both central slices and a separate 3D isosurface PNG in `outputs/plots/`.
 
 Supported labels: `1s`, `2s`, `3s`, `2p_x`, `2p_y`, `2p_z`, `3p_x`, `3p_y`,
 `3p_z`, `3d_xy`, `3d_xz`, `3d_yz`, `3d_x2-y2`, and `3d_z2`.
@@ -16,7 +16,7 @@ The state is computed with the same three-dimensional Cartesian finite-differenc
 Hamiltonian, `H = -0.5 * Laplacian - 1/r`, and zero boundary on the cube faces.
 No analytical hydrogen wavefunction is used to generate the plotted data.
 
-`hydrogen_orbitals.py` uses exact reflection symmetries to solve a smaller
+`schrodinger3d/hydrogen.py` uses exact reflection symmetries to solve a smaller
 matrix on the positive octant. On a centered even grid, the first point is h/2.
 Its ghost neighbor at -h/2 equals `parity * psi(h/2)`, so each inner octant face
 adds `-parity / (2*h**2)` to the existing kinetic diagonal. Mirroring the result

@@ -1,6 +1,6 @@
 """Edit V below, save, then double-click plot.cmd.
 
-Select potential = "custom" in settings.toml.
+Select potential = "custom" in config/settings.toml.
 Units: hbar = mass = 1. Do not multiply V by the grid spacing.
 The cube still has zero-wavefunction boundary conditions on all six faces.
 """

@@ -1,9 +1,9 @@
-"""Start here to read the complete physics workflow. Run: python example.py."""
+"""Complete physics workflow. From the project root: python -m examples.basic_usage."""
 
 import numpy as np
 
-from potentials import make_potential
-from schrodinger_3d import make_grid, build_hamiltonian, solve_lowest_states
+from schrodinger3d.potentials import make_potential
+from schrodinger3d.solver import make_grid, build_hamiltonian, solve_lowest_states
 
 
 def main():

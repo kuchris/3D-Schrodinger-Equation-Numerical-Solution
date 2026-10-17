@@ -8,7 +8,7 @@ if not exist "%~dp0.venv\Scripts\python.exe" (
 "%~dp0.venv\Scripts\python.exe" -m pip install -r "%~dp0requirements.txt"
 if errorlevel 1 goto failed
 echo.
-echo Setup complete. Edit settings.toml and custom_potential.py, then run plot.cmd.
+echo Setup complete. Edit config\settings.toml and custom\potential.py, then run plot.cmd.
 pause
 exit /b 0
 

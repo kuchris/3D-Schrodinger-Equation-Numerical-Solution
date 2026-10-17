@@ -5,8 +5,8 @@ Numerical Method](https://doi.org/10.13140/RG.2.2.13878.01602/1), December 2021.
 The accessible [ResearchGate full text](https://www.researchgate.net/publication/357203546_Solving_3D_Time_Independent_Schrodinger_Equation_Using_Numerical_Method)
 was checked against Section IV and Appendix A.
 
-Select a preset by changing `simulation.potential` in `settings.toml`.
-The formulas are named functions in [`potentials.py`](../potentials.py).
+Select a preset by changing `simulation.potential` in `config/settings.toml`.
+The formulas are named functions in [`schrodinger3d/potentials.py`](../schrodinger3d/potentials.py).
 Here `L` is `simulation.length`, and `rho = sqrt(x**2 + y**2)`.
 
 | Setting | Formula | Paper location |
@@ -19,7 +19,7 @@ Here `L` is `simulation.length`, and `rho = sqrt(x**2 + y**2)`.
 | `hydrogen` | `-1 / sqrt(x**2 + y**2 + z**2)` | IV.F, Eq. (33), p. 32 |
 
 The existing `harmonic` option remains the separate `omega=1` benchmark,
-`V = (x**2 + y**2 + z**2) / 2`. `custom` still reads `custom_potential.py`.
+`V = (x**2 + y**2 + z**2) / 2`. `custom` still reads `custom/potential.py`.
 
 ## Source details
 
