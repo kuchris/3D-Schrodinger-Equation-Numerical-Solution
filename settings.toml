@@ -1,0 +1,26 @@
+# Edit and save this file, then double-click plot.cmd to generate a plot.
+
+[simulation]
+# "custom" = your function in custom_potential.py
+# Built-in alternatives: "harmonic" or "box"
+potential = "custom"
+
+# Interior grid points per axis. An odd number includes the exact center.
+n = 25
+
+# Cube side length. Each axis runs from -length/2 to +length/2.
+length = 8.0
+
+# Minimum number of lowest states to compute. The selected state is included.
+states = 10
+
+[plot]
+# 0 = ground state; 1 = first excited state. Indices count degenerate states.
+state = 4
+
+# "wavefunction" = signed amplitude (red/blue); "density" = probability density
+quantity = "wavefunction"
+
+# Leave empty to save an automatically named image in the plots folder.
+# Paths are relative to this settings file, e.g. "plots/my_state.png".
+output = ""
